@@ -1,0 +1,35 @@
+{
+  "generatedAt": "2026-09-08",
+  "latestIssueDate": "2026-09-08",
+  "completedTopics": [],
+  "completedSeries": [],
+  "history": [
+    {
+      "date": "2026-09-08",
+      "topicId": "llm-next-token-agent-action",
+      "seriesId": "llm-foundations",
+      "part": 1,
+      "complete": false
+    }
+  ],
+  "pendingSeries": {
+    "id": "llm-foundations",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "模型的内层 token loop 与 runtime 的外层 action loop 是两个不同状态机",
+        "结构化 decoding 保证语法边界，不保证语义、权限或完成",
+        "环境 observation 和 verifier 用于切断自回归错误累积"
+      ],
+      "en": [
+        "The model's inner token loop and the runtime's outer action loop are separate state machines",
+        "Constrained decoding protects syntax, not semantics, authorization, or completion",
+        "Environment observations and verifiers interrupt autoregressive error accumulation"
+      ]
+    },
+    "next": {
+      "zh": "打开 Transformer 黑盒：embedding、position、self-attention 与 residual stream 如何共同产生下一 token logits。",
+      "en": "Open the Transformer black box: how embeddings, position, self-attention, and the residual stream produce next-token logits."
+    }
+  }
+}
