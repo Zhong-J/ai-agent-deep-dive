@@ -1,9 +1,16 @@
 {
-  "generatedAt": "2026-09-08",
-  "latestIssueDate": "2026-09-08",
+  "generatedAt": "2026-09-09",
+  "latestIssueDate": "2026-09-09",
   "completedTopics": [],
   "completedSeries": [],
   "history": [
+    {
+      "date": "2026-09-09",
+      "topicId": "llm-transformer-attention-residual-stream",
+      "seriesId": "llm-foundations",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-09-08",
       "topicId": "llm-next-token-agent-action",
@@ -14,22 +21,24 @@
   ],
   "pendingSeries": {
     "id": "llm-foundations",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "模型的内层 token loop 与 runtime 的外层 action loop 是两个不同状态机",
-        "结构化 decoding 保证语法边界，不保证语义、权限或完成",
-        "环境 observation 和 verifier 用于切断自回归错误累积"
+        "embedding 与位置机制初始化每个 token 的 residual state",
+        "causal self-attention 通过 query-key routing 混合过去位置的 value，MLP 再做位置内计算",
+        "context 可见性不保证可靠检索，消息角色也不是权限隔离",
+        "最后位置的 residual state 经 unembedding 形成下一 token logits"
       ],
       "en": [
-        "The model's inner token loop and the runtime's outer action loop are separate state machines",
-        "Constrained decoding protects syntax, not semantics, authorization, or completion",
-        "Environment observations and verifiers interrupt autoregressive error accumulation"
+        "Embeddings and positional mechanisms initialize each token's residual state",
+        "Causal self-attention mixes values from prior positions through query-key routing, followed by per-position MLP computation",
+        "Context visibility does not guarantee reliable retrieval, and message roles are not permission isolation",
+        "The final position's residual state is unembedded into next-token logits"
       ]
     },
     "next": {
-      "zh": "打开 Transformer 黑盒：embedding、position、self-attention 与 residual stream 如何共同产生下一 token logits。",
-      "en": "Open the Transformer black box: how embeddings, position, self-attention, and the residual stream produce next-token logits."
+      "zh": "完成 LLM 内核主线：prefill、decode、KV cache、batching 与 context length 如何决定 Agent tool loop 的延迟、显存和成本。",
+      "en": "Complete the LLM Internals sequence: how prefill, decode, the KV cache, batching, and context length determine latency, memory, and cost in an agent tool loop."
     }
   }
 }
