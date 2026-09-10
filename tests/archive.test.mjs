@@ -104,6 +104,17 @@ test("generateArchive creates index, dated page, search data, and curriculum sta
   }
 });
 
+test("generated styles keep hidden archive search results out of layout", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "deep-dive-hidden-results-"));
+  try {
+    await generateArchive({ outputDirectory: directory, issues: [fixture()] });
+    const styles = await readFile(join(directory, "assets", "styles.css"), "utf8");
+    assert.match(styles, /\[hidden\]\s*\{\s*display:\s*none\s*!important\s*\}/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("generateArchive does not resurrect a series completed by its latest part", async () => {
   const directory = await mkdtemp(join(tmpdir(), "deep-dive-complete-"));
   const completed = fixture({
