@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
   <title>Agent 为什么越跑越慢？ · AI Agent Deep Dive</title>
   <link rel="stylesheet" href="../assets/styles.css">
 </head>
@@ -112,7 +113,7 @@ while not stop:
         <div class="section-copy"><p><strong>LLM Internals 1/3:</strong> we established two state machines. An autoregressive model iterates over token distributions; the agent runtime turns structured output into authorized environmental side effects. <strong>Part 2:</strong> we opened one prediction and followed embeddings, position, causal attention, MLPs, and the residual stream as they compress a prefix into next-token logits, while separating “inside context” from “reliably used.” <strong>Part 3:</strong> we placed that computation graph on a serving timeline, separated prefill from decode, quantified the KV cache, and explained batching, fragmentation, and the repeated-prefill tax of a tool loop.</p><p><strong>This series is complete.</strong> You can now inspect an agent trace through four distinct questions: why the model selected a token, why the runtime permitted an action, why this round was slow, and why growing context was expensive. We have not yet explained how training creates those probabilities or how sampling, alignment, and inference policy change behavior. The next systematic curriculum area will be <strong>training objectives and inference control</strong>: cross-entropy, teacher forcing, scaling, temperature and top-p, and alignment—connecting what a model learned to why it answers as it does at runtime.</p></div>
       </section>
     </article>
-    <nav class="issue-nav" aria-label="Issue navigation"><a href="2026-09-09.html"><span data-nav-language="zh">← 上一篇</span><span data-nav-language="en" hidden>← Previous</span><strong data-nav-language="zh">一个 token 在 Transformer 内部经历了什么？</strong><strong data-nav-language="en" hidden>What Happens to a Token Inside a Transformer?</strong></a><span></span></nav>
+    <nav class="issue-nav" aria-label="Issue navigation"><a href="2026-09-09.html"><span data-nav-language="zh">← 上一篇</span><span data-nav-language="en" hidden>← Previous</span><strong data-nav-language="zh">一个 token 在 Transformer 内部经历了什么？</strong><strong data-nav-language="en" hidden>What Happens to a Token Inside a Transformer?</strong></a><a href="2026-09-11.html"><span data-nav-language="zh">下一篇 →</span><span data-nav-language="en" hidden>Next →</span><strong data-nav-language="zh">LLM 到底在训练什么？</strong><strong data-nav-language="en" hidden>What Is an LLM Actually Trained to Do?</strong></a></nav>
   </main>
   <script>
 (() => {

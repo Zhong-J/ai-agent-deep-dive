@@ -115,6 +115,21 @@ test("generated styles keep hidden archive search results out of layout", async 
   }
 });
 
+test("generated pages declare a favicon without a network request", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "deep-dive-favicon-"));
+  try {
+    await generateArchive({ outputDirectory: directory, issues: [fixture()] });
+    const [index, page] = await Promise.all([
+      readFile(join(directory, "index.html"), "utf8"),
+      readFile(join(directory, "entries", "2026-09-08.html"), "utf8"),
+    ]);
+    assert.match(index, /<link rel="icon" href="data:,">/);
+    assert.match(page, /<link rel="icon" href="data:,">/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("generateArchive does not resurrect a series completed by its latest part", async () => {
   const directory = await mkdtemp(join(tmpdir(), "deep-dive-complete-"));
   const completed = fixture({

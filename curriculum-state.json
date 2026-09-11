@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-10",
-  "latestIssueDate": "2026-09-10",
+  "generatedAt": "2026-09-11",
+  "latestIssueDate": "2026-09-11",
   "completedTopics": [
     "llm-prefill-decode-kv-cache"
   ],
@@ -8,6 +8,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-11",
+      "topicId": "llm-cross-entropy-teacher-forcing",
+      "seriesId": "llm-training-inference-control",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-09-10",
       "topicId": "llm-prefill-decode-kv-cache",
@@ -30,5 +37,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "llm-training-inference-control",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "next-token cross-entropy 在真实 prefix 上最大化训练数据似然",
+        "teacher forcing 提供逐位置并行监督，但训练与闭环 rollout 的 prefix 分布不同",
+        "平均 loss/perplexity 不能替代关键 Agent 决策和长轨迹成功率",
+        "结构化 observation 与 verifier 可以帮助错误轨迹恢复"
+      ],
+      "en": [
+        "Next-token cross-entropy maximizes training-data likelihood on ground-truth prefixes",
+        "Teacher forcing provides parallel per-position supervision while training and closed-loop rollout prefixes follow different distributions",
+        "Average loss or perplexity cannot replace evaluation of critical agent decisions and long-horizon success",
+        "Structured observations and verifiers can help an erroneous trajectory recover"
+      ]
+    },
+    "next": {
+      "zh": "进入优化与 scaling：learning rate、batch、AdamW、数据混合与 compute budget 怎样把局部梯度变成模型能力，以及 scaling law 的预测边界。",
+      "en": "Move into optimization and scaling: how learning rates, batches, AdamW, data mixtures, and compute budgets turn local gradients into model capability, and where scaling-law predictions stop."
+    }
+  }
 }

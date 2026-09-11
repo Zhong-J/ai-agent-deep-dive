@@ -137,6 +137,7 @@ function renderIssuePage(issue, issues) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
   <title>${escapeHtml(issue.title.zh)} · AI Agent Deep Dive</title>
   <link rel="stylesheet" href="../assets/styles.css">
 </head>
@@ -182,6 +183,7 @@ function renderIndex(issues, searchData) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
   <title>AI Agent Deep Dive · Daily Learning Archive</title>
   <link rel="stylesheet" href="assets/styles.css">
 </head>
