@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-11",
-  "latestIssueDate": "2026-09-11",
+  "generatedAt": "2026-09-12",
+  "latestIssueDate": "2026-09-12",
   "completedTopics": [
     "llm-prefill-decode-kv-cache"
   ],
@@ -8,6 +8,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-12",
+      "topicId": "llm-optimization-scaling-data-mixtures",
+      "seriesId": "llm-training-inference-control",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-09-11",
       "topicId": "llm-cross-entropy-teacher-forcing",
@@ -39,24 +46,24 @@
   ],
   "pendingSeries": {
     "id": "llm-training-inference-control",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "next-token cross-entropy 在真实 prefix 上最大化训练数据似然",
-        "teacher forcing 提供逐位置并行监督，但训练与闭环 rollout 的 prefix 分布不同",
-        "平均 loss/perplexity 不能替代关键 Agent 决策和长轨迹成功率",
-        "结构化 observation 与 verifier 可以帮助错误轨迹恢复"
+        "AdamW moments、learning-rate schedule、global batch 与 gradient clipping 共同决定实际 parameter update",
+        "optimizer、sampler 与 step/token counter 都属于可恢复训练状态",
+        "数据 mixture、去重和重复 epoch 改变不同能力与风险获得的 gradient 权重",
+        "compute-optimal average loss 不等于最佳 Agent 行为或最低 serving 成本"
       ],
       "en": [
-        "Next-token cross-entropy maximizes training-data likelihood on ground-truth prefixes",
-        "Teacher forcing provides parallel per-position supervision while training and closed-loop rollout prefixes follow different distributions",
-        "Average loss or perplexity cannot replace evaluation of critical agent decisions and long-horizon success",
-        "Structured observations and verifiers can help an erroneous trajectory recover"
+        "AdamW moments, the learning-rate schedule, global batch, and gradient clipping jointly determine each parameter update",
+        "Optimizer, sampler, and step or token counters all belong to recoverable training state",
+        "Data mixtures, deduplication, and repeated epochs change the gradient weight given to capabilities and risks",
+        "Compute-optimal average loss is not equivalent to the best agent behavior or lowest serving cost"
       ]
     },
     "next": {
-      "zh": "进入优化与 scaling：learning rate、batch、AdamW、数据混合与 compute budget 怎样把局部梯度变成模型能力，以及 scaling law 的预测边界。",
-      "en": "Move into optimization and scaling: how learning rates, batches, AdamW, data mixtures, and compute budgets turn local gradients into model capability, and where scaling-law predictions stop."
+      "zh": "进入 sampling：temperature、greedy、top-k、top-p、seed 与 constrained decoding 怎样从同一 logits 产生不同 Agent 行为，以及 determinism 的真实边界。",
+      "en": "Move into sampling: how temperature, greedy decoding, top-k, top-p, seeds, and constrained decoding turn the same logits into different agent behavior, and the real boundary of determinism."
     }
   }
 }
