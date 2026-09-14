@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-12",
-  "latestIssueDate": "2026-09-12",
+  "generatedAt": "2026-09-14",
+  "latestIssueDate": "2026-09-14",
   "completedTopics": [
     "llm-prefill-decode-kv-cache"
   ],
@@ -8,6 +8,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-14",
+      "topicId": "llm-sampling-constrained-decoding-determinism",
+      "seriesId": "llm-training-inference-control",
+      "part": 3,
+      "complete": false
+    },
     {
       "date": "2026-09-12",
       "topicId": "llm-optimization-scaling-data-mixtures",
@@ -46,24 +53,24 @@
   ],
   "pendingSeries": {
     "id": "llm-training-inference-control",
-    "nextPart": 3,
+    "nextPart": 4,
     "established": {
       "zh": [
-        "AdamW moments、learning-rate schedule、global batch 与 gradient clipping 共同决定实际 parameter update",
-        "optimizer、sampler 与 step/token counter 都属于可恢复训练状态",
-        "数据 mixture、去重和重复 epoch 改变不同能力与风险获得的 gradient 权重",
-        "compute-optimal average loss 不等于最佳 Agent 行为或最低 serving 成本"
+        "temperature 重塑概率差异，top-k/top-p 截断候选集合，greedy 或 RNG 执行选择",
+        "constrained decoding 保证语法而非业务语义、授权或环境成功",
+        "seed 只有在完整 logits、processor、RNG state 与调用序列一致时才可能复现 token",
+        "系统级确定性需要版本化输入、工具、状态机与事件 replay，而不只是 temperature 0"
       ],
       "en": [
-        "AdamW moments, the learning-rate schedule, global batch, and gradient clipping jointly determine each parameter update",
-        "Optimizer, sampler, and step or token counters all belong to recoverable training state",
-        "Data mixtures, deduplication, and repeated epochs change the gradient weight given to capabilities and risks",
-        "Compute-optimal average loss is not equivalent to the best agent behavior or lowest serving cost"
+        "Temperature reshapes probability differences, top-k or top-p truncates candidates, and greedy selection or an RNG chooses a token",
+        "Constrained decoding guarantees syntax rather than business semantics, authorization, or environmental success",
+        "A seed can reproduce tokens only when logits, processors, RNG state, and the sequence of draws are identical",
+        "System-level determinism requires versioned inputs, tools, state machines, and event replay—not merely temperature zero"
       ]
     },
     "next": {
-      "zh": "进入 sampling：temperature、greedy、top-k、top-p、seed 与 constrained decoding 怎样从同一 logits 产生不同 Agent 行为，以及 determinism 的真实边界。",
-      "en": "Move into sampling: how temperature, greedy decoding, top-k, top-p, seeds, and constrained decoding turn the same logits into different agent behavior, and the real boundary of determinism."
+      "zh": "完成本系列：SFT、reward model、PPO/RLHF 与 DPO 如何改变模型行为，以及训练目标、sampling policy 和 Agent runtime policy 的完整控制栈。",
+      "en": "Complete the series: how SFT, reward models, PPO/RLHF, and DPO change behavior, and the full control stack spanning training objectives, sampling policy, and agent runtime policy."
     }
   }
 }

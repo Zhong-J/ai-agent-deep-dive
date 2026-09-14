@@ -72,6 +72,10 @@ export function validateIssue(issue) {
   }
   if (typeof issue.series.complete !== "boolean") throw new Error("series.complete must be boolean");
   if (!Array.isArray(issue.sections)) throw new Error("sections must be an array");
+  if (issue.sections.length !== REQUIRED_SECTIONS.length
+    || issue.sections.some((section, index) => section?.id !== REQUIRED_SECTIONS[index])) {
+    throw new Error(`sections must appear once in the exact required order: ${REQUIRED_SECTIONS.join(", ")}`);
+  }
   for (const id of REQUIRED_SECTIONS) {
     const section = issue.sections.find((candidate) => candidate?.id === id);
     if (!section) throw new Error(`${id} section is required`);

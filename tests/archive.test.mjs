@@ -58,6 +58,18 @@ test("validateIssue rejects a missing English section", () => {
   assert.throws(() => validateIssue(issue), /mechanism.*English/i);
 });
 
+test("validateIssue rejects sections outside the exact required order", () => {
+  const issue = fixture();
+  [issue.sections[0], issue.sections[1]] = [issue.sections[1], issue.sections[0]];
+  assert.throws(() => validateIssue(issue), /sections.*exact required order/i);
+});
+
+test("validateIssue rejects duplicate or extra sections", () => {
+  const issue = fixture();
+  issue.sections.push(structuredClone(issue.sections[0]));
+  assert.throws(() => validateIssue(issue), /sections.*exact required order/i);
+});
+
 test("validateIssue rejects inconsistent series continuation", () => {
   const issue = fixture({ continuation: { status: "complete" } });
   assert.throws(() => validateIssue(issue), /series.*complete/i);
