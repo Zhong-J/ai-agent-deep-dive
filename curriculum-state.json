@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-15",
-  "latestIssueDate": "2026-09-15",
+  "generatedAt": "2026-09-16",
+  "latestIssueDate": "2026-09-16",
   "completedTopics": [
     "llm-sft-rlhf-dpo-alignment",
     "llm-prefill-decode-kv-cache"
@@ -10,6 +10,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-16",
+      "topicId": "agent-runtime-state-machine-tool-lifecycle",
+      "seriesId": "agent-runtime-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-09-15",
       "topicId": "llm-sft-rlhf-dpo-alignment",
@@ -60,5 +67,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "agent-runtime-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "durable state、immutable events 与 side-effect commands 必须分离",
+        "模型输出只提出 transition，runtime guard、authorization 与 invariant 决定合法性",
+        "tool call 使用稳定 callId、独立 attemptId，并区分 success、failure 与 outcome unknown",
+        "completion、approval 与 cancellation 都是可持久化 runtime transitions"
+      ],
+      "en": [
+        "Durable state, immutable events, and side-effect commands must remain separate",
+        "Model output proposes a transition while runtime guards, authorization, and invariants decide legality",
+        "A tool call uses a stable call ID, separate attempt IDs, and distinguishes success, failure, and unknown outcome",
+        "Completion, approval, and cancellation are durable runtime transitions"
+      ]
+    },
+    "next": {
+      "zh": "进入 structured concurrency：task group、dependency DAG、deadline/cancellation propagation、fan-out 限制、queue 与 backpressure。",
+      "en": "Move into structured concurrency: task groups, dependency DAGs, deadline and cancellation propagation, bounded fan-out, queues, and backpressure."
+    }
+  }
 }
