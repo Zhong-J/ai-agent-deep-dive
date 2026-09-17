@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-16",
-  "latestIssueDate": "2026-09-16",
+  "generatedAt": "2026-09-17",
+  "latestIssueDate": "2026-09-17",
   "completedTopics": [
     "llm-sft-rlhf-dpo-alignment",
     "llm-prefill-decode-kv-cache"
@@ -10,6 +10,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-17",
+      "topicId": "agent-runtime-structured-concurrency-backpressure",
+      "seriesId": "agent-runtime-internals",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-09-16",
       "topicId": "agent-runtime-state-machine-tool-lifecycle",
@@ -69,24 +76,24 @@
   ],
   "pendingSeries": {
     "id": "agent-runtime-internals",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "durable state、immutable events 与 side-effect commands 必须分离",
-        "模型输出只提出 transition，runtime guard、authorization 与 invariant 决定合法性",
-        "tool call 使用稳定 callId、独立 attemptId，并区分 success、failure 与 outcome unknown",
-        "completion、approval 与 cancellation 都是可持久化 runtime transitions"
+        "并行 eligibility 由 dependency、effect/resource conflict 与 capacity 独立约束",
+        "structured concurrency 将 child lifecycle、deadline、cancellation 与 failure policy 绑定到 parent scope",
+        "bounded queue、semaphore 与 demand-based dispatch 形成 backpressure",
+        "并发结果按稳定规则 join，并用 projection version 保留决策所见事实"
       ],
       "en": [
-        "Durable state, immutable events, and side-effect commands must remain separate",
-        "Model output proposes a transition while runtime guards, authorization, and invariants decide legality",
-        "A tool call uses a stable call ID, separate attempt IDs, and distinguishes success, failure, and unknown outcome",
-        "Completion, approval, and cancellation are durable runtime transitions"
+        "Parallel eligibility is independently constrained by dependencies, effect or resource conflicts, and capacity",
+        "Structured concurrency binds child lifetimes, deadlines, cancellation, and failure policy to a parent scope",
+        "Bounded queues, semaphores, and demand-based dispatch create backpressure",
+        "Concurrent results join in stable order and projection versions preserve the facts visible to each decision"
       ]
     },
     "next": {
-      "zh": "进入 structured concurrency：task group、dependency DAG、deadline/cancellation propagation、fan-out 限制、queue 与 backpressure。",
-      "en": "Move into structured concurrency: task groups, dependency DAGs, deadline and cancellation propagation, bounded fan-out, queues, and backpressure."
+      "zh": "进入 idempotency 与 durable recovery：idempotency key、dedup ledger、retry/backoff、checkpoint/replay、compensation 与 exactly-once illusion。",
+      "en": "Move into idempotency and durable recovery: idempotency keys, deduplication ledgers, retry and backoff, checkpoints and replay, compensation, and the exactly-once illusion."
     }
   }
 }
