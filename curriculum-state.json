@@ -1,15 +1,24 @@
 {
-  "generatedAt": "2026-09-18",
-  "latestIssueDate": "2026-09-18",
+  "generatedAt": "2026-09-19",
+  "latestIssueDate": "2026-09-19",
   "completedTopics": [
+    "agent-runtime-long-running-control-plane",
     "llm-sft-rlhf-dpo-alignment",
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "agent-runtime-internals",
     "llm-training-inference-control",
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-19",
+      "topicId": "agent-runtime-long-running-control-plane",
+      "seriesId": "agent-runtime-internals",
+      "part": 4,
+      "complete": true
+    },
     {
       "date": "2026-09-18",
       "topicId": "agent-runtime-idempotency-durable-recovery",
@@ -81,26 +90,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "agent-runtime-internals",
-    "nextPart": 4,
-    "established": {
-      "zh": [
-        "稳定 idempotency key 与 canonical request fingerprint 将多个 attempts 绑定到一个逻辑 operation",
-        "retry classifier、backoff/jitter、deadline 与 retry budget 共同限制自动重试",
-        "checkpoint replay 重建决策而不重复副作用，未决 call 先 lookup/reconcile",
-        "compensation 是新的可失败业务动作，exactly-once effect 需要 effect owner 参与"
-      ],
-      "en": [
-        "A stable idempotency key and canonical request fingerprint bind several attempts to one logical operation",
-        "A retry classifier, backoff and jitter, deadlines, and retry budgets jointly bound automatic retries",
-        "Checkpoint replay rebuilds decisions without repeating side effects, and unresolved calls lookup or reconcile first",
-        "Compensation is a new fallible business action, and exactly-once effect requires the effect owner to participate"
-      ]
-    },
-    "next": {
-      "zh": "完成本系列：长运行 control plane、durable timers、signals、human approval、workflow versioning、supervision、terminal verification 与 runbook。",
-      "en": "Complete the series: long-running control planes, durable timers, signals, human approval, workflow versioning, supervision, terminal verification, and runbooks."
-    }
-  }
+  "pendingSeries": null
 }
