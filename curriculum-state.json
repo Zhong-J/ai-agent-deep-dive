@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-19",
-  "latestIssueDate": "2026-09-19",
+  "generatedAt": "2026-09-21",
+  "latestIssueDate": "2026-09-21",
   "completedTopics": [
     "agent-runtime-long-running-control-plane",
     "llm-sft-rlhf-dpo-alignment",
@@ -12,6 +12,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-21",
+      "topicId": "context-memory-state-boundaries",
+      "seriesId": "context-memory-systems",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-09-19",
       "topicId": "agent-runtime-long-running-control-plane",
@@ -90,5 +97,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "context-memory-systems",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "context window 是临时 token view，不是持久 memory",
+        "event log、working state、retrieval index 与 durable records 必须分层",
+        "context assembly 先做权限与时态过滤，再排序和分配 token",
+        "memory 写入经过 provenance、冲突与版本化 admission"
+      ],
+      "en": [
+        "A context window is a temporary token view, not persistent memory",
+        "Event logs, working state, retrieval indexes, and durable records require separate layers",
+        "Context assembly applies authorization and temporal gates before ranking and token allocation",
+        "Memory write-back requires provenance-, conflict-, and version-aware admission"
+      ]
+    },
+    "next": {
+      "zh": "进入 compression：分离 lossless history 与 lossy summaries，定义 invariant、更新策略、error budget 与可逆引用。",
+      "en": "Move into compression: separate lossless history from lossy summaries and define invariants, update policy, error budgets, and reversible references."
+    }
+  }
 }
