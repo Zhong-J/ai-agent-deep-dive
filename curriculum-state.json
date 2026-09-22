@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-21",
-  "latestIssueDate": "2026-09-21",
+  "generatedAt": "2026-09-22",
+  "latestIssueDate": "2026-09-22",
   "completedTopics": [
     "agent-runtime-long-running-control-plane",
     "llm-sft-rlhf-dpo-alignment",
@@ -12,6 +12,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-22",
+      "topicId": "context-memory-lossy-compression",
+      "seriesId": "context-memory-systems",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-09-21",
       "topicId": "context-memory-state-boundaries",
@@ -99,24 +106,24 @@
   ],
   "pendingSeries": {
     "id": "context-memory-systems",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "context window 是临时 token view，不是持久 memory",
-        "event log、working state、retrieval index 与 durable records 必须分层",
-        "context assembly 先做权限与时态过滤，再排序和分配 token",
-        "memory 写入经过 provenance、冲突与版本化 admission"
+        "lossless event/artifact 是事实层，summary 是可重算的派生 cache",
+        "typed invariant lane 保护授权、约束、open effects 与 deadline",
+        "rolling/hierarchical summaries 通过 source refs 支持风险触发 rehydration",
+        "compression manifest 与版本化使信息损失可定位、可重建"
       ],
       "en": [
-        "A context window is a temporary token view, not persistent memory",
-        "Event logs, working state, retrieval indexes, and durable records require separate layers",
-        "Context assembly applies authorization and temporal gates before ranking and token allocation",
-        "Memory write-back requires provenance-, conflict-, and version-aware admission"
+        "Lossless events and artifacts are the fact layer; summaries are recomputable derived caches",
+        "A typed invariant lane protects authorization, constraints, open effects, and deadlines",
+        "Rolling and hierarchical summaries support risk-triggered rehydration through source references",
+        "Compression manifests and versioning make information loss locatable and rebuildable"
       ]
     },
     "next": {
-      "zh": "进入 compression：分离 lossless history 与 lossy summaries，定义 invariant、更新策略、error budget 与可逆引用。",
-      "en": "Move into compression: separate lossless history from lossy summaries and define invariants, update policy, error budgets, and reversible references."
+      "zh": "进入 retrieval 与 lifecycle：hybrid search、memory admission、consolidation、supersession、decay 与 deletion propagation。",
+      "en": "Move into retrieval and lifecycle: hybrid search, memory admission, consolidation, supersession, decay, and deletion propagation."
     }
   }
 }
