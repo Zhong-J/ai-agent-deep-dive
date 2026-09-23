@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-22",
-  "latestIssueDate": "2026-09-22",
+  "generatedAt": "2026-09-23",
+  "latestIssueDate": "2026-09-23",
   "completedTopics": [
     "agent-runtime-long-running-control-plane",
     "llm-sft-rlhf-dpo-alignment",
@@ -12,6 +12,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-23",
+      "topicId": "context-memory-retrieval-lifecycle",
+      "seriesId": "context-memory-systems",
+      "part": 3,
+      "complete": false
+    },
     {
       "date": "2026-09-22",
       "topicId": "context-memory-lossy-compression",
@@ -106,24 +113,24 @@
   ],
   "pendingSeries": {
     "id": "context-memory-systems",
-    "nextPart": 3,
+    "nextPart": 4,
     "established": {
       "zh": [
-        "lossless event/artifact 是事实层，summary 是可重算的派生 cache",
-        "typed invariant lane 保护授权、约束、open effects 与 deadline",
-        "rolling/hierarchical summaries 通过 source refs 支持风险触发 rehydration",
-        "compression manifest 与版本化使信息损失可定位、可重建"
+        "candidate 经 admission 成为 canonical versioned record",
+        "BM25/vector/metadata/graph 是可重建 projections",
+        "读取先做 ACL/time/tombstone gates，再融合排序并暴露 conflict",
+        "consolidation、supersession、decay 与 deletion 是不同 lifecycle 操作"
       ],
       "en": [
-        "Lossless events and artifacts are the fact layer; summaries are recomputable derived caches",
-        "A typed invariant lane protects authorization, constraints, open effects, and deadlines",
-        "Rolling and hierarchical summaries support risk-triggered rehydration through source references",
-        "Compression manifests and versioning make information loss locatable and rebuildable"
+        "Candidates become canonical versioned records through admission",
+        "BM25, vector, metadata, and graph structures are rebuildable projections",
+        "Reads apply ACL, time, and tombstone gates before fusion and conflict exposure",
+        "Consolidation, supersession, decay, and deletion are distinct lifecycle operations"
       ]
     },
     "next": {
-      "zh": "进入 retrieval 与 lifecycle：hybrid search、memory admission、consolidation、supersession、decay 与 deletion propagation。",
-      "en": "Move into retrieval and lifecycle: hybrid search, memory admission, consolidation, supersession, decay, and deletion propagation."
+      "zh": "完成本系列：端到端 memory eval、failure attribution、online guardrails 与生产架构检查表。",
+      "en": "Complete the series with end-to-end memory evaluation, failure attribution, online guardrails, and a production architecture checklist."
     }
   }
 }
