@@ -1,0 +1,135 @@
+{
+  "date": "2026-09-24",
+  "slug": "memory-evaluation-production",
+  "readingMinutes": 20,
+  "topicId": "context-memory-evaluation-production",
+  "series": {
+    "id": "context-memory-systems",
+    "title": {
+      "zh": "Context 与 Memory 系统",
+      "en": "Context and Memory Systems"
+    },
+    "part": 4,
+    "total": 4,
+    "complete": true
+  },
+  "title": {
+    "zh": "Agent 说“我记得”，你怎么证明它真的记对了？",
+    "en": "When an Agent Says “I Remember,” How Do You Prove It?"
+  },
+  "dek": {
+    "zh": "用 temporal eval、counterfactual、failure attribution、online guardrails 与生产检查表验证完整 memory pipeline。",
+    "en": "Validate the full memory pipeline with temporal evaluation, counterfactuals, failure attribution, online guardrails, and a production checklist."
+  },
+  "tags": [
+    "Memory evaluation",
+    "Temporal testing",
+    "Failure attribution",
+    "Online guardrails",
+    "Production readiness"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>一个 Agent 在 demo 中正确提到用户偏好，不证明 memory system 有效。偏好可能仍在当前 prompt，测试数据可能泄漏到 index，top-k 可能偶然命中，模型也可能靠常识猜中。反过来，一次答案错误也不能直接归咎于 retrieval：候选可能正确，却被 ACL 过滤、token budget 截断、摘要改写，或被模型忽略。</p><p>memory eval 必须把完整数据流作为被测系统：source event → extraction → admission/versioning → indexes → query/filter/rank → context assembly → model decision → lifecycle/delete。既要给各边界可判定的局部 oracle，也要用真实 downstream task 检查组合效果；同时用时间切分保证被测系统只能使用当时可知的信息。</p><div class=\"callout\"><strong>核心判断：</strong>memory 的成功不是“召回了类似文本”，而是在给定 principal、decision time 与 risk policy 下，使用当时有效且获授权的证据作出正确行动，并在证据不足、冲突或已删除时安全 abstain。</div>",
+        "en": "<p>An agent mentioning a preference correctly in a demo does not prove its memory system works. The preference may still be present in the current prompt, test data may leak into the index, top-k may hit accidentally, or the model may guess from common sense. Conversely, one wrong answer is not automatically a retrieval defect: the correct candidate may have been filtered by ACL, truncated by token budget, distorted by summary, or ignored by the model.</p><p>Memory evaluation treats the complete data flow as the system under test: source event, extraction, admission and versioning, indexes, query and ranking, context assembly, model decision, and lifecycle or deletion. Each boundary needs a local oracle, while realistic downstream tasks test their composition. Temporal splits ensure that the system uses only information available at the historical decision time.</p><div class=\"callout\"><strong>Core judgment:</strong> memory success is not retrieving similar text. For a given principal, decision time, and risk policy, the agent uses authorized evidence valid at that time, takes the correct action, and safely abstains when evidence is absent, conflicting, or deleted.</div>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "把前三篇变成可检验合同",
+        "en": "Turn the first three parts into testable contracts"
+      },
+      "html": {
+        "zh": "<p>1/4 要求 context、event log、working state、index 与 durable record 分层；2/4 要求 lossy summary 可回源、invariant 绕过压缩；3/4 要求 candidate admission、hard gates、hybrid ranking 和可验证删除。今天把每条架构判断翻译成 eval contract：给定 source 与 policy，系统应写什么、不写什么；给定历史时点和 principal，应返回哪些 record versions；给定 token budget，哪些 invariant 必须仍在 context；给定 tombstone，任何派生 index 都不得再次暴露正文。</p><p>这也决定数据集不能只是 question/answer pairs。一个 case 至少包含事件时间线、source authority、scope、ACL principal、memory operations、decision query、expected evidence set、forbidden evidence set、expected action/abstention，以及每个阶段的 trace oracle。只有这样，失败才可定位而不是笼统记为“答案不对”。</p>",
+        "en": "<p>Part 1 separated context, event log, working state, indexes, and durable records. Part 2 required lossy summaries to remain source-reversible while invariants bypass compression. Part 3 introduced candidate admission, hard gates, hybrid ranking, and verifiable deletion. Today turns each architectural judgment into an evaluation contract: given source and policy, what should be written or rejected; given historical time and principal, which record versions may be returned; given a token budget, which invariants must remain in context; given a tombstone, which derivatives must stop exposing content.</p><p>The dataset cannot be merely question-answer pairs. A case needs an event timeline, source authority, scope, ACL principal, memory operations, decision query, expected and forbidden evidence sets, expected action or abstention, and trace oracles for each stage. Only then can a failure be localized rather than labeled generically “wrong answer.”</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "机制：一个能归因的端到端 eval harness",
+        "en": "Mechanism: an attributable end-to-end evaluation harness"
+      },
+      "html": {
+        "zh": "<h3>1. Freeze a temporal world</h3><p>fixture 用 append-only events 构造世界，在多个 cutoff T₁/T₂/T₃ 运行。T₁ 查询不得看见 T₂ 才写入的更新；迟到事件同时测试 valid time 与 transaction time。index snapshot、policy version、assembler version、model version 固定，避免重跑时偷用未来状态。</p><h3>2. 写入 eval</h3><p>给 extraction/admission 成对样本：明确事实、推断、临时 tool noise、PII、跨租户文本、重复、冲突和更新。测 field exactness、source attribution、write precision/recall、duplicate rate、conflict-set creation、supersession correctness 与 forbidden-write rate。高 write recall 若伴随大量推断污染并非成功。</p><h3>3. Retrieval eval</h3><p>每个 query 定义 relevant set、required authoritative set、forbidden set 和 acceptable alternatives。分别测 lexical/vector/graph recall，再测 hard-filter leakage=0、temporal correctness、conflict coverage、nDCG/MRR 和最终 evidence precision。没有 exhaustive source 时，正确结果可能是 unknown。</p><h3>4. Compression/assembly eval</h3><p>用包含否定、数字、open effects、approval 与冲突的长 episode 压缩。检查 invariant fidelity、source-reference validity、summary hallucination、stale invalidation 和 rehydration trigger。然后给固定 budget，比较 expected context manifest：policy/state 是否保留，禁止证据是否缺席，关键 source 是否因 risk rule 展开。</p><h3>5. Model-use eval</h3><p>固定 assembled evidence 后单独调用模型，避免把 retrieval 与 reasoning 混在一起。任务要求引用 recordId、区分事实/推断、解释 conflict，并按 contract action/abstain。测 citation entailment、unsupported claim、correct action、calibrated abstention 和对 adversarial instructions 的抵抗。</p><h3>6. Counterfactual pairs</h3><p>只改变一个 memory fact 或 ACL，其他输入完全相同：地址 A→B 后输出必须改变；将 record 标 tombstone 后不得继续引用；把 authoritative update 换成低权威 rumor 后应 conflict/abstain。若输出不变，可能未使用 memory；若无关变化也影响输出，说明 context contamination。</p><h3>7. Deletion eval</h3><p>先证明 record 可从 canonical、BM25、vector、graph、summary、cache 召回，再发删除。立即检查 query deny，等待 propagation SLO 后重新枚举所有 projections，并从冷启动重建 index 证明 tombstone 不会复活。backup 依 retention policy 检查不可在线恢复，而非声称瞬间物理擦除。</p><h3>8. Failure attribution</h3><p>harness 保存 source events、candidate、admission result、record versions、retriever lists、filter reasons、scores、context manifest、model output 与 verifier result。first-divergence classifier 找到最早偏离 oracle 的边界：source missing、extract、write、index lag、filter、rank、compress、serialize、model-use 或 lifecycle。</p><h3>9. Online shadow 与 canary</h3><p>新 pipeline 先 shadow：读取同一请求但不影响行动，比较 evidence set、latency、cost、leakage。canary 按 tenant/task/risk 分层，小比例启用，并设 rollback 条件：forbidden retrieval、abstention collapse、deletion SLO breach 或高风险 action regression 立即停。线上 implicit feedback 不能替代标注 eval，因为用户不纠正不等于正确。</p><h3>10. Production checklist</h3><p>上线前回答：canonical truth 在哪；每个 record 是否有 provenance/ACL/time/version；summary 是否可回源；index 是否可重建；hard gate 是否在模型前；冲突是否显式；unknown 是否可表达；删除是否覆盖派生；trace 是否可 replay；每个 high-risk action 是否有 authoritative verifier。任何一项“否”都不是调 top-k 能修复的问题。</p><h3>11. Baseline 与 ablation</h3><p>至少比较四个 baseline：无 memory、仅 recent window、oracle evidence、完整 pipeline。无 memory 衡量模型本身能猜多少；recent window 衡量持久 memory 的增益；oracle evidence 给出 retrieval 上限；完整 pipeline 显示真实组合表现。再逐一关闭 summary、vector、authority feature、conflict exposure 或 rehydration 做 ablation。若复杂系统不优于 recent window，就不应以架构漂亮为理由上线；若 oracle evidence 仍失败，继续调 retriever 没有意义，应修 model-use 或 task contract。</p><h3>12. 人工 adjudication 与 corpus 治理</h3><p>authority 冲突、隐私用途和“合理 abstain”常没有单一自动答案。双人独立标注加第三方 adjudication，记录 disagreement reason，而不是强行隐藏分歧。dataset 本身需要 version、source license、PII handling、case owner、last review 和 retirement policy；模型或 policy 变化后重新抽样。测试集不能由生产 trace 无限制积累，否则会把敏感数据和用户错误永久固化。每次 release 保存 eval manifest：dataset version、code/model/index snapshot、thresholds 与逐 case evidence，确保结果可复现。</p>",
+        "en": "<h3>1. Freeze a temporal world</h3><p>Fixtures construct a world from append-only events and execute at cutoffs T1, T2, and T3. A T1 query cannot see an update written at T2. Late-arriving events test valid time separately from transaction time. Index snapshot, policy version, assembler version, and model version remain fixed so replay cannot borrow future state.</p><h3>2. Evaluate writes</h3><p>Give extraction and admission paired examples: explicit facts, inferences, transient tool noise, PII, cross-tenant text, duplicates, conflicts, and updates. Measure field exactness, source attribution, write precision and recall, duplicate rate, conflict-set creation, supersession correctness, and forbidden-write rate. High write recall accompanied by inference pollution is not success.</p><h3>3. Evaluate retrieval</h3><p>Each query defines a relevant set, required authoritative set, forbidden set, and acceptable alternatives. Measure lexical, vector, and graph recall separately, then zero hard-filter leakage, temporal correctness, conflict coverage, nDCG or MRR, and final evidence precision. Where no exhaustive source exists, unknown may be the only correct result.</p><h3>4. Evaluate compression and assembly</h3><p>Compress long episodes containing negation, numbers, open effects, approval, and conflicts. Check invariant fidelity, source-reference validity, summary hallucination, stale invalidation, and rehydration triggers. Under a fixed token budget, compare the context manifest with an oracle: policy and state remain, forbidden evidence is absent, and high-risk sources expand when policy requires them.</p><h3>5. Evaluate model use</h3><p>Call the model with fixed assembled evidence to separate reasoning from retrieval. The task requires record-ID citations, distinctions between fact and inference, conflict explanation, and action or abstention according to contract. Measure citation entailment, unsupported claims, correct action, calibrated abstention, and resistance to adversarial instructions in retrieved data.</p><h3>6. Use counterfactual pairs</h3><p>Change exactly one memory fact or ACL while keeping all other input constant. When address A changes to B, the action must change. After a tombstone, the record cannot be cited. Replacing an authoritative update with a low-authority rumor should cause conflict or abstention. Unchanged output suggests memory was unused; changes from irrelevant mutations reveal contamination.</p><h3>7. Evaluate deletion</h3><p>First prove a record is retrievable from canonical store, BM25, vector, graph, summary, and cache. Issue deletion, check immediate query denial, wait for the propagation SLO, and enumerate projections again. Rebuild an index from cold state to prove the tombstone prevents resurrection. Backup tests follow retention policy and verify the record cannot return online rather than claiming instantaneous physical erasure.</p><h3>8. Attribute failures</h3><p>The harness retains source events, candidate, admission result, record versions, retriever lists, filter reasons, scores, context manifest, model output, and verifier result. A first-divergence classifier finds the earliest boundary that differs from oracle: source missing, extraction, write, index lag, filter, rank, compression, serialization, model use, or lifecycle.</p><h3>9. Shadow and canary online</h3><p>A new pipeline first runs in shadow: it reads the same request without affecting action, comparing evidence sets, latency, cost, and leakage. Canary rollout is stratified by tenant, task, and risk. Forbidden retrieval, abstention collapse, deletion-SLO breach, or high-risk action regression triggers rollback. Implicit feedback never replaces labeled evaluation; lack of user correction does not prove correctness.</p><h3>10. Production checklist</h3><p>Before launch ask: where canonical truth lives; whether every record has provenance, ACL, time, and version; whether summaries are source-reversible; whether indexes rebuild; whether hard gates precede the model; whether conflicts and unknown are explicit; whether deletion covers derivatives; whether traces replay; and whether every high-risk action has an authoritative verifier. A “no” is not repairable by tuning top-k.</p><h3>11. Baselines and ablations</h3><p>Compare at least four baselines: no memory, recent window only, oracle evidence, and the complete pipeline. No memory measures how much the model can guess. A recent window measures the marginal benefit of persistence. Oracle evidence provides the upper bound when retrieval is perfect. The complete pipeline shows actual composition. Then disable summaries, vector search, authority features, conflict exposure, and rehydration one at a time. If the complex system does not beat a recent window, architectural sophistication is not a reason to ship. If oracle evidence still fails, further retriever tuning is irrelevant; repair model use or the task contract.</p><h3>12. Human adjudication and corpus governance</h3><p>Authority conflicts, privacy purpose, and reasonable abstention often lack one automatic answer. Use two independent annotators with third-party adjudication and preserve disagreement reasons instead of hiding ambiguity. The dataset itself needs a version, source license, PII handling rule, case owner, last-review date, and retirement policy. Resample after model or policy changes. Production traces cannot accumulate without limit as test data, or the corpus permanently stores sensitive information and user mistakes.</p><p>Every release retains an evaluation manifest: dataset version, code, model and index snapshots, thresholds, per-case evidence, and adjudication revision. This makes a score reproducible and reveals when an apparent gain comes from changing cases or labels rather than improving the memory system. Regression triage starts from newly failing cases and first divergence, while periodic challenge sets test unseen conflict, deletion, and temporal patterns.</p>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "必要数学：端到端成功与分层诊断",
+        "en": "Essential mathematics: end-to-end success and layered diagnosis"
+      },
+      "html": {
+        "zh": "<h3>端到端不是单项指标</h3><p>设写入正确率 W、检索含 required evidence 的概率 R、assembly 保真率 A、模型正确使用概率 U，则简化端到端成功近似 <strong>P(success)=W·R·A·U</strong>。这不是独立性事实，而是诊断直觉：即使每层 0.95，乘积只有约 0.814；优化已经 0.99 的 retrieval，可能不如修复 0.80 的 model-use。</p><h3>安全要单列</h3><p>forbidden leakage rate <strong>L=forbidden retrieved/forbidden opportunities</strong> 的目标通常是 0，不能被平均 task accuracy 抵消。abstention precision 衡量 abstain 中真正证据不足的比例，abstention recall 衡量所有应 abstain case 被捕获的比例。只提高 recall 会让 Agent 过度拒绝；只提高 precision 会让它在未知时冒进。</p><h3>时间切分</h3><p>对 decision time T，只允许使用 <strong>K(T)={r | transactionTime(r)≤T 且 validAt(r,T)}</strong>。这个集合定义防止未来更新泄漏，并区分“当时知道什么”与“现在回看什么”。每个 eval case 必须记录 cutoff 和 index snapshot，而不是在最新数据库上重放旧问题。</p>",
+        "en": "<h3>End-to-end is not one metric</h3><p>Let W be correct write probability, R the probability retrieval contains required evidence, A assembly fidelity, and U correct model use. A simplified diagnostic is <strong>P(success)=W·R·A·U</strong>. This is not a claim of statistical independence; it shows compounding. Four layers at 0.95 yield about 0.814. Improving retrieval from 0.99 may matter less than repairing model use at 0.80.</p><h3>Measure safety separately</h3><p>Forbidden leakage rate <strong>L=forbidden retrieved/forbidden opportunities</strong> commonly targets zero and cannot be averaged away by task accuracy. Abstention precision measures how often an abstention truly lacked evidence; abstention recall measures how many cases requiring abstention were caught. Optimizing recall alone makes an agent refuse too much, while precision alone encourages unsafe action under uncertainty.</p><h3>Temporal splits</h3><p>For decision time T, permit only <strong>K(T)={r | transactionTime(r)≤T and validAt(r,T)}</strong>. This prevents future updates from leaking and distinguishes “what was known then” from “what is known now.” Every case records cutoff and index snapshot rather than replaying historical questions against the latest database.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统的影响",
+        "en": "Implications for agent systems"
+      },
+      "html": {
+        "zh": "<p><strong>开发：</strong>memory 变更必须带 eval fixtures，就像数据库 migration 带兼容测试。改 embedding、chunking、summary prompt、ACL filter 或 quota 都可能改变 evidence set，需 replay historical traces。</p><p><strong>运营：</strong>dashboard 分层展示 write rejection、conflict、index lag、hard-filter leakage、required-evidence recall、context truncation、unsupported claim、abstention 与 deletion SLO。总成功率只用于结果，不用于定位。</p><p><strong>产品：</strong>高风险回答展示来源时间和 conflict；unknown/manual review 是一等状态。用户可以查看、更正、删除 durable profile，但不能直接改 control-plane audit history。</p><p><strong>成本：</strong>eval corpus、shadow traffic、trace retention 与人工 adjudication 昂贵。按风险分层：低风险 preference 可抽样，高风险 authorization/deletion 做全量 deterministic gate。成本目标不是少测，而是把强验证放在错误损失最高处。</p>",
+        "en": "<p><strong>Development:</strong> memory changes ship with evaluation fixtures just as database migrations ship with compatibility tests. Changing embeddings, chunking, summary prompts, ACL filters, or quotas can alter evidence sets and requires replay of historical traces.</p><p><strong>Operations:</strong> dashboards separate write rejection, conflicts, index lag, hard-filter leakage, required-evidence recall, context truncation, unsupported claims, abstention, and deletion SLOs. Overall success measures outcomes but cannot diagnose.</p><p><strong>Product:</strong> high-risk answers expose source time and conflicts. Unknown and manual review are first-class states. Users may inspect, correct, and delete durable profiles without rewriting control-plane audit history.</p><p><strong>Cost:</strong> evaluation corpora, shadow traffic, trace retention, and human adjudication are expensive. Stratify by risk: sample low-risk preferences, while authorization and deletion use exhaustive deterministic gates. The objective is not less testing but stronger evidence where failure loss is highest.</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "设计取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<ul><li><strong>数据泄漏：</strong>用最新 index 回答历史问题让指标虚高；冻结 cutoff/snapshot。</li><li><strong>合成数据过净：</strong>真实 memory 有迟到、重复、冲突、拼写和越权；fixture 必须保留脏边界。</li><li><strong>只测 retrieval：</strong>候选命中但模型不用仍失败；固定 evidence 单测 model-use。</li><li><strong>只测 final answer：</strong>无法归因且模型常识可猜中；保存 stage oracles 和 counterfactual。</li><li><strong>LLM-as-judge 循环：</strong>judge 可能共享偏见；高风险用 deterministic verifier/人工 adjudication，judge 只扩展覆盖。</li><li><strong>线上点击率：</strong>用户接受可能因懒惰，非正确；implicit signal 不作为 truth label。</li><li><strong>平均数掩盖安全：</strong>跨租户 leakage 即使罕见也不可被 accuracy 抵消；单列 zero-tolerance gates。</li><li><strong>测试删除但不重建：</strong>现有 index 无结果不证明未来 rebuild 不复活；必须 cold rebuild。</li></ul>",
+        "en": "<ul><li><strong>Temporal leakage:</strong> answering historical questions with the latest index inflates metrics; freeze cutoff and snapshot.</li><li><strong>Over-clean synthetic data:</strong> real memory contains late, duplicate, conflicting, misspelled, and unauthorized records; fixtures preserve dirty boundaries.</li><li><strong>Retrieval-only testing:</strong> candidate hits do not matter if the model ignores them. Test model use with fixed evidence.</li><li><strong>Final-answer-only testing:</strong> it cannot attribute failure, and common sense can guess answers. Keep stage oracles and counterfactuals.</li><li><strong>LLM-judge loop:</strong> judges share biases. Use deterministic verifiers or human adjudication for high risk; judges expand coverage only.</li><li><strong>Online click-through:</strong> user acceptance may reflect effort, not correctness. Implicit signals are not truth labels.</li><li><strong>Averages hide safety:</strong> rare cross-tenant leakage cannot be offset by accuracy. Track zero-tolerance gates separately.</li><li><strong>Deletion without rebuild:</strong> absence from a current index does not prove future rebuild will not resurrect data. Perform a cold rebuild.</li></ul>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可复用的技术判断",
+        "en": "Reusable technical judgments"
+      },
+      "html": {
+        "zh": "<ul><li>memory eval 的单位是带 timeline、principal、policy、evidence oracle 与 expected action 的 case。</li><li>局部测 extraction/admission/retrieval/assembly/model-use/lifecycle，端到端测组合行动。</li><li>temporal cutoff、counterfactual pair 与 forbidden set 防止泄漏、猜中和安全平均化。</li><li>first divergence 比最终分数更可操作；每层必须留下可 replay trace。</li><li>shadow/canary/rollback 与 deletion cold rebuild 是生产 guardrail，不是离线 benchmark 的附属品。</li></ul>",
+        "en": "<ul><li>A memory-evaluation case includes timeline, principal, policy, evidence oracle, and expected action.</li><li>Test extraction, admission, retrieval, assembly, model use, and lifecycle locally; test composed action end to end.</li><li>Temporal cutoffs, counterfactual pairs, and forbidden sets prevent leakage, guessing, and safety averaging.</li><li>First divergence is more actionable than final score; every layer leaves a replayable trace.</li><li>Shadow, canary, rollback, and deletion cold rebuild are production guardrails, not benchmark accessories.</li></ul>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "一手资料",
+        "en": "Primary sources"
+      },
+      "html": {
+        "zh": "<ul class=\"source-list\"><li><a href=\"https://arxiv.org/abs/2410.10813\">LongMemEval</a> — 长期 memory 的 extraction、multi-session、temporal、update、abstention benchmark。</li><li><a href=\"https://arxiv.org/abs/2305.14251\">RAGAS</a> — RAG evaluation 的作者框架与实验。</li><li><a href=\"https://arxiv.org/abs/2311.09476\">ARES</a> — 自动化 RAG evaluation 的作者方法与报告结果。</li><li><a href=\"https://arxiv.org/abs/2309.15217\">FreshLLMs</a> — freshness-aware QA 与时间变化评测。</li><li><a href=\"https://www.nist.gov/privacy-framework\">NIST Privacy Framework</a> — 隐私风险和数据生命周期框架。</li><li><a href=\"https://www.rfc-editor.org/rfc/rfc9110\">RFC 9110</a> — cache validation/invalidation 语义背景。</li></ul><p>分层 oracle、first-divergence、deletion cold rebuild 与生产检查表是本文综合设计；论文指标与作者报告结果不自动等于生产保证。</p>",
+        "en": "<ul class=\"source-list\"><li><a href=\"https://arxiv.org/abs/2410.10813\">LongMemEval</a> — a benchmark for extraction, multi-session and temporal reasoning, updates, and abstention.</li><li><a href=\"https://arxiv.org/abs/2305.14251\">RAGAS</a> — an author framework and experiments for RAG evaluation.</li><li><a href=\"https://arxiv.org/abs/2311.09476\">ARES</a> — an author method with reported results for automated RAG evaluation.</li><li><a href=\"https://arxiv.org/abs/2309.15217\">FreshLLMs</a> — freshness-aware question answering and evaluation under changing information.</li><li><a href=\"https://www.nist.gov/privacy-framework\">NIST Privacy Framework</a> — a privacy-risk and data-lifecycle framework.</li><li><a href=\"https://www.rfc-editor.org/rfc/rfc9110\">RFC 9110</a> — background for cache validation and invalidation semantics.</li></ul><p>Layered oracles, first-divergence analysis, deletion cold rebuild, and the production checklist are editorial synthesis. Paper metrics and author-reported results do not automatically establish production guarantees.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "本系列收束与下一条主线",
+        "en": "Series synthesis and next track"
+      },
+      "html": {
+        "zh": "<p><strong>今天已完成：</strong>memory eval 用 temporal world、stage oracles、counterfactual、forbidden evidence、downstream action 与 deletion rebuild 验证完整 pipeline；first-divergence 归因失败，shadow/canary/rollback 控制线上风险。</p><p><strong>四篇合起来：</strong>context 是临时 view；history/state/index/record 分层；compression 是可回源 cache；retrieval 以 admission、authority、time 和 lifecycle 管理；evaluation 证明组合后的 Agent 在该用、该停和该忘时都正确。</p><p><strong>本系列状态：</strong>Context 与 Memory 系统 4/4 已完成。下一条系统主线进入 Tools & Extensibility，从“schema 如何决定模型可表达的动作空间”开始，深挖 tool contracts、MCP、skills/plugins 的发现、权限与组合边界。</p>",
+        "en": "<p><strong>Completed today:</strong> memory evaluation validates the pipeline with temporal worlds, stage oracles, counterfactuals, forbidden evidence, downstream actions, and deletion rebuilds. First divergence attributes failure; shadow, canary, and rollback control online risk.</p><p><strong>Across four parts:</strong> context is a temporary view; history, state, index, and records are separate; compression is a source-reversible cache; retrieval manages admission, authority, time, and lifecycle; evaluation proves the composed agent uses, stops, and forgets correctly.</p><p><strong>Series status:</strong> Context and Memory Systems 4/4 is complete. The next systematic track is Tools and Extensibility, beginning with how schemas determine the model's action space and then examining tool contracts, MCP, skills and plugins, discovery, authorization, and composition boundaries.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "complete"
+  }
+}
