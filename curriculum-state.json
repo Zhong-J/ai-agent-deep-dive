@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-24",
-  "latestIssueDate": "2026-09-24",
+  "generatedAt": "2026-09-25",
+  "latestIssueDate": "2026-09-25",
   "completedTopics": [
     "context-memory-evaluation-production",
     "agent-runtime-long-running-control-plane",
@@ -14,6 +14,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-25",
+      "topicId": "tools-schema-action-contract",
+      "seriesId": "tools-extensibility-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-09-24",
       "topicId": "context-memory-evaluation-production",
@@ -120,5 +127,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "tools-extensibility-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "tool schema 定义模型可表达的动作语法",
+        "semantic/policy contract 补足 schema 无法表达的业务与授权条件",
+        "可信 identity、approval、deadline、idempotency 由 runtime 注入",
+        "typed error/result 与版本化支持 recovery、replay 和 evolution"
+      ],
+      "en": [
+        "Tool schemas define the syntax of model-expressible actions",
+        "Semantic and policy contracts add business and authorization conditions beyond schema",
+        "Runtime injects trusted identity, approval, deadline, and idempotency",
+        "Typed errors and results plus versions support recovery, replay, and evolution"
+      ]
+    },
+    "next": {
+      "zh": "进入 discovery/MCP：capability negotiation、tool catalog、动态刷新、trust boundary、namespace 与选择规模。",
+      "en": "Move into discovery and MCP: capability negotiation, tool catalogs, dynamic refresh, trust boundaries, namespaces, and selection scale."
+    }
+  }
 }
