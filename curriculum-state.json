@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-25",
-  "latestIssueDate": "2026-09-25",
+  "generatedAt": "2026-09-26",
+  "latestIssueDate": "2026-09-26",
   "completedTopics": [
     "context-memory-evaluation-production",
     "agent-runtime-long-running-control-plane",
@@ -14,6 +14,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-26",
+      "topicId": "tools-mcp-discovery-catalog",
+      "seriesId": "tools-extensibility-internals",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-09-25",
       "topicId": "tools-schema-action-contract",
@@ -129,24 +136,24 @@
   ],
   "pendingSeries": {
     "id": "tools-extensibility-internals",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "tool schema 定义模型可表达的动作语法",
-        "semantic/policy contract 补足 schema 无法表达的业务与授权条件",
-        "可信 identity、approval、deadline、idempotency 由 runtime 注入",
-        "typed error/result 与版本化支持 recovery、replay 和 evolution"
+        "MCP advertised catalog 是 untrusted capability claims",
+        "host 通过 provenance、namespace、schema 与 policy 编译 authorized snapshot",
+        "模型每轮只接收 task-specific working set",
+        "listChanged 生成新 snapshot，in-flight calls 保留捕获 identity"
       ],
       "en": [
-        "Tool schemas define the syntax of model-expressible actions",
-        "Semantic and policy contracts add business and authorization conditions beyond schema",
-        "Runtime injects trusted identity, approval, deadline, and idempotency",
-        "Typed errors and results plus versions support recovery, replay, and evolution"
+        "The MCP advertised catalog contains untrusted capability claims",
+        "The host compiles an authorized snapshot using provenance, namespaces, schemas, and policy",
+        "Each model turn receives only a task-specific working set",
+        "listChanged creates a new snapshot while in-flight calls retain captured identity"
       ]
     },
     "next": {
-      "zh": "进入 discovery/MCP：capability negotiation、tool catalog、动态刷新、trust boundary、namespace 与选择规模。",
-      "en": "Move into discovery and MCP: capability negotiation, tool catalogs, dynamic refresh, trust boundaries, namespaces, and selection scale."
+      "zh": "进入 skill/plugin packaging 与 composition：instruction/data/code trust、依赖图、permission manifest、sandbox 和冲突解析。",
+      "en": "Move into skill and plugin packaging and composition: instruction, data, and code trust, dependency graphs, permission manifests, sandboxes, and conflict resolution."
     }
   }
 }
