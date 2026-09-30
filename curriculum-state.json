@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-26",
-  "latestIssueDate": "2026-09-26",
+  "generatedAt": "2026-09-30",
+  "latestIssueDate": "2026-09-30",
   "completedTopics": [
     "context-memory-evaluation-production",
     "agent-runtime-long-running-control-plane",
@@ -14,6 +14,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-09-30",
+      "topicId": "tools-skills-plugins-packaging",
+      "seriesId": "tools-extensibility-internals",
+      "part": 3,
+      "complete": false
+    },
     {
       "date": "2026-09-26",
       "topicId": "tools-mcp-discovery-catalog",
@@ -136,24 +143,24 @@
   ],
   "pendingSeries": {
     "id": "tools-extensibility-internals",
-    "nextPart": 3,
+    "nextPart": 4,
     "established": {
       "zh": [
-        "MCP advertised catalog 是 untrusted capability claims",
-        "host 通过 provenance、namespace、schema 与 policy 编译 authorized snapshot",
-        "模型每轮只接收 task-specific working set",
-        "listChanged 生成新 snapshot，in-flight calls 保留捕获 identity"
+        "package 是分发单位，不是 trust domain",
+        "instruction/data/code/tools 按 component 分别授权与隔离",
+        "依赖闭包与 policy 生成按 component 切片的 effective permission graph",
+        "snapshot pin、显式 precedence 与 lifecycle 支撑安全 composition/upgrade/uninstall"
       ],
       "en": [
-        "The MCP advertised catalog contains untrusted capability claims",
-        "The host compiles an authorized snapshot using provenance, namespaces, schemas, and policy",
-        "Each model turn receives only a task-specific working set",
-        "listChanged creates a new snapshot while in-flight calls retain captured identity"
+        "A package is a distribution unit, not a trust domain",
+        "Instructions, data, code, and tools are authorized and isolated per component",
+        "Dependency closure and policy produce a per-component effective permission graph",
+        "Snapshot pinning, explicit precedence, and lifecycle rules support safe composition, upgrade, and uninstall"
       ]
     },
     "next": {
-      "zh": "进入 skill/plugin packaging 与 composition：instruction/data/code trust、依赖图、permission manifest、sandbox 和冲突解析。",
-      "en": "Move into skill and plugin packaging and composition: instruction, data, and code trust, dependency graphs, permission manifests, sandboxes, and conflict resolution."
+      "zh": "完成本系列：extension eval、prompt injection/SSRF/secret exfiltration defenses、contract testing、online rollout 与生产检查表。",
+      "en": "Complete the series with extension evaluation, prompt-injection, SSRF, and secret-exfiltration defenses, contract testing, online rollout, and a production checklist."
     }
   }
 }
