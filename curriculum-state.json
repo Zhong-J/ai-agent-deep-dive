@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-01",
-  "latestIssueDate": "2026-10-01",
+  "generatedAt": "2026-10-02",
+  "latestIssueDate": "2026-10-02",
   "completedTopics": [
     "tools-extension-security-eval",
     "context-memory-evaluation-production",
@@ -16,6 +16,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-02",
+      "topicId": "reliability-evidence-model",
+      "seriesId": "reliability-safety-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-10-01",
       "topicId": "tools-extension-security-eval",
@@ -150,5 +157,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "reliability-safety-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "trace observation、claim、evidence 与 verifier verdict 是不同对象",
+        "统一 identity graph 连接 context、model、tool、effect、artifact 与 observer",
+        "terminal gate 只接受 fresh required claims 全 pass 且无 unresolved effects",
+        "online verification 与 offline eval 共享 evidence graph 和 first-divergence"
+      ],
+      "en": [
+        "Trace observations, claims, evidence, and verifier verdicts are distinct objects",
+        "A unified identity graph links context, model, tool, effect, artifact, and observer",
+        "The terminal gate requires every fresh required claim to pass with no unresolved effects",
+        "Online verification and offline evaluation share an evidence graph and first-divergence analysis"
+      ]
+    },
+    "next": {
+      "zh": "进入 prompt injection 与 authorization：攻击链、taint/trust labels、capability gating、human-in-the-loop 与 output sanitization。",
+      "en": "Move into prompt injection and authorization: attack chains, taint and trust labels, capability gating, human involvement, and output sanitization."
+    }
+  }
 }
