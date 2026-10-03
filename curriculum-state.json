@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-02",
-  "latestIssueDate": "2026-10-02",
+  "generatedAt": "2026-10-03",
+  "latestIssueDate": "2026-10-03",
   "completedTopics": [
     "tools-extension-security-eval",
     "context-memory-evaluation-production",
@@ -16,6 +16,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-03",
+      "topicId": "reliability-prompt-injection-authorization",
+      "seriesId": "reliability-safety-internals",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-10-02",
       "topicId": "reliability-evidence-model",
@@ -159,24 +166,24 @@
   ],
   "pendingSeries": {
     "id": "reliability-safety-internals",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "trace observation、claim、evidence 与 verifier verdict 是不同对象",
-        "统一 identity graph 连接 context、model、tool、effect、artifact 与 observer",
-        "terminal gate 只接受 fresh required claims 全 pass 且无 unresolved effects",
-        "online verification 与 offline eval 共享 evidence graph 和 first-divergence"
+        "prompt injection 是 tainted data 到 privileged effect 的信息流问题",
+        "context 保留 provenance/trust/taint，transformation 不自动洗白",
+        "模型只出 proposal，外部 policy 签发最小 capability",
+        "approval 绑定 canonical effect，runtime/effect owner 重验，output 回到 data"
       ],
       "en": [
-        "Trace observations, claims, evidence, and verifier verdicts are distinct objects",
-        "A unified identity graph links context, model, tool, effect, artifact, and observer",
-        "The terminal gate requires every fresh required claim to pass with no unresolved effects",
-        "Online verification and offline evaluation share an evidence graph and first-divergence analysis"
+        "Prompt injection is an information-flow problem from tainted data to privileged effects",
+        "Context preserves provenance, trust, and taint; transformation does not cleanse automatically",
+        "The model proposes actions while external policy issues minimal capability",
+        "Approval binds the canonical effect, runtime and effect owner revalidate, and outputs return to data status"
       ]
     },
     "next": {
-      "zh": "进入 prompt injection 与 authorization：攻击链、taint/trust labels、capability gating、human-in-the-loop 与 output sanitization。",
-      "en": "Move into prompt injection and authorization: attack chains, taint and trust labels, capability gating, human involvement, and output sanitization."
+      "zh": "进入 sandboxing/computer use isolation：OS/container/VM 边界、brokers、egress、ephemeral workspace、resource quotas 与 escape testing。",
+      "en": "Move into sandboxing and computer-use isolation: OS, container, and VM boundaries, brokers, egress, ephemeral workspaces, resource quotas, and escape testing."
     }
   }
 }
