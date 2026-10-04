@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-03",
-  "latestIssueDate": "2026-10-03",
+  "generatedAt": "2026-10-04",
+  "latestIssueDate": "2026-10-04",
   "completedTopics": [
     "tools-extension-security-eval",
     "context-memory-evaluation-production",
@@ -16,6 +16,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-04",
+      "topicId": "reliability-sandbox-computer-use",
+      "seriesId": "reliability-safety-internals",
+      "part": 3,
+      "complete": false
+    },
     {
       "date": "2026-10-03",
       "topicId": "reliability-prompt-injection-authorization",
@@ -166,24 +173,24 @@
   ],
   "pendingSeries": {
     "id": "reliability-safety-internals",
-    "nextPart": 3,
+    "nextPart": 4,
     "established": {
       "zh": [
-        "prompt injection 是 tainted data 到 privileged effect 的信息流问题",
-        "context 保留 provenance/trust/taint，transformation 不自动洗白",
-        "模型只出 proposal，外部 policy 签发最小 capability",
-        "approval 绑定 canonical effect，runtime/effect owner 重验，output 回到 data"
+        "sandbox 是 deny boundaries 与 controlled exits 的组合",
+        "process/container/VM 按 code/data/secret/network/effect risk 选择",
+        "filesystem/network/browser/secret/process 通过外部 capability brokers",
+        "teardown、artifact publish 与 escape testing 使用外部 evidence"
       ],
       "en": [
-        "Prompt injection is an information-flow problem from tainted data to privileged effects",
-        "Context preserves provenance, trust, and taint; transformation does not cleanse automatically",
-        "The model proposes actions while external policy issues minimal capability",
-        "Approval binds the canonical effect, runtime and effect owner revalidate, and outputs return to data status"
+        "A sandbox combines deny boundaries with controlled exits",
+        "Processes, containers, and VMs are selected by code, data, secret, network, and effect risk",
+        "Filesystem, network, browser, secret, and process access goes through external capability brokers",
+        "Teardown, artifact publication, and escape testing use external evidence"
       ]
     },
     "next": {
-      "zh": "进入 sandboxing/computer use isolation：OS/container/VM 边界、brokers、egress、ephemeral workspace、resource quotas 与 escape testing。",
-      "en": "Move into sandboxing and computer-use isolation: OS, container, and VM boundaries, brokers, egress, ephemeral workspaces, resource quotas, and escape testing."
+      "zh": "完成本系列：端到端 SLO、tail latency、token/tool economics、risk-weighted routing、degradation、release gates 与生产检查表。",
+      "en": "Complete the series with end-to-end SLOs, tail latency, token and tool economics, risk-weighted routing, degradation, release gates, and a production checklist."
     }
   }
 }
