@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-10-04",
-  "latestIssueDate": "2026-10-04",
+  "generatedAt": "2026-10-05",
+  "latestIssueDate": "2026-10-05",
   "completedTopics": [
+    "reliability-slo-routing-economics",
     "tools-extension-security-eval",
     "context-memory-evaluation-production",
     "agent-runtime-long-running-control-plane",
@@ -9,6 +10,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "reliability-safety-internals",
     "tools-extensibility-internals",
     "context-memory-systems",
     "agent-runtime-internals",
@@ -16,6 +18,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-05",
+      "topicId": "reliability-slo-routing-economics",
+      "seriesId": "reliability-safety-internals",
+      "part": 4,
+      "complete": true
+    },
     {
       "date": "2026-10-04",
       "topicId": "reliability-sandbox-computer-use",
@@ -171,26 +180,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "reliability-safety-internals",
-    "nextPart": 4,
-    "established": {
-      "zh": [
-        "sandbox 是 deny boundaries 与 controlled exits 的组合",
-        "process/container/VM 按 code/data/secret/network/effect risk 选择",
-        "filesystem/network/browser/secret/process 通过外部 capability brokers",
-        "teardown、artifact publish 与 escape testing 使用外部 evidence"
-      ],
-      "en": [
-        "A sandbox combines deny boundaries with controlled exits",
-        "Processes, containers, and VMs are selected by code, data, secret, network, and effect risk",
-        "Filesystem, network, browser, secret, and process access goes through external capability brokers",
-        "Teardown, artifact publication, and escape testing use external evidence"
-      ]
-    },
-    "next": {
-      "zh": "完成本系列：端到端 SLO、tail latency、token/tool economics、risk-weighted routing、degradation、release gates 与生产检查表。",
-      "en": "Complete the series with end-to-end SLOs, tail latency, token and tool economics, risk-weighted routing, degradation, release gates, and a production checklist."
-    }
-  }
+  "pendingSeries": null
 }
