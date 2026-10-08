@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-05",
-  "latestIssueDate": "2026-10-05",
+  "generatedAt": "2026-10-08",
+  "latestIssueDate": "2026-10-08",
   "completedTopics": [
     "reliability-slo-routing-economics",
     "tools-extension-security-eval",
@@ -18,6 +18,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-08",
+      "topicId": "advanced-multi-agent-coordination",
+      "seriesId": "advanced-agent-systems",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-10-05",
       "topicId": "reliability-slo-routing-economics",
@@ -180,5 +187,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "advanced-agent-systems",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "multi-agent 是 distributed workflow，不是群聊",
+        "delegation contract 绑定 snapshot、claims、resources、capabilities、budget 与 verifier",
+        "single-writer/version/CAS 与 fencing 保护 canonical state",
+        "integrator 处理 conflict，global verifier 决定 terminal state"
+      ],
+      "en": [
+        "Multi-agent systems are distributed workflows, not group chats",
+        "Delegation contracts bind snapshots, claims, resources, capabilities, budgets, and verifiers",
+        "Single-writer ownership, versions, compare-and-swap, and fencing protect canonical state",
+        "Integrators handle conflict and global verifiers decide terminal state"
+      ]
+    },
+    "next": {
+      "zh": "进入 model routing：capability profiles、confidence/calibration、cascades、escalation、ensemble disagreement、cost-quality frontier 与 route verification。",
+      "en": "Move into model routing: capability profiles, confidence and calibration, cascades, escalation, ensemble disagreement, cost-quality frontiers, and route verification."
+    }
+  }
 }
