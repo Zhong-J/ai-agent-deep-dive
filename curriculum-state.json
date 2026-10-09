@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-08",
-  "latestIssueDate": "2026-10-08",
+  "generatedAt": "2026-10-09",
+  "latestIssueDate": "2026-10-09",
   "completedTopics": [
     "reliability-slo-routing-economics",
     "tools-extension-security-eval",
@@ -18,6 +18,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-09",
+      "topicId": "advanced-model-routing-cascades",
+      "seriesId": "advanced-agent-systems",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-10-08",
       "topicId": "advanced-multi-agent-coordination",
@@ -189,24 +196,24 @@
   ],
   "pendingSeries": {
     "id": "advanced-agent-systems",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "multi-agent 是 distributed workflow，不是群聊",
-        "delegation contract 绑定 snapshot、claims、resources、capabilities、budget 与 verifier",
-        "single-writer/version/CAS 与 fencing 保护 canonical state",
-        "integrator 处理 conflict，global verifier 决定 terminal state"
+        "model route 绑定 task/input/policy/budget 快照",
+        "capability profile 按 task slice 和模型版本评测",
+        "可逆 cheap attempt 后用校准 gate 选择升级、复核或 abstain",
+        "verifier 是 stop rule，所有 attempts 与 repair 计入成本"
       ],
       "en": [
-        "Multi-agent systems are distributed workflows, not group chats",
-        "Delegation contracts bind snapshots, claims, resources, capabilities, budgets, and verifiers",
-        "Single-writer ownership, versions, compare-and-swap, and fencing protect canonical state",
-        "Integrators handle conflict and global verifiers decide terminal state"
+        "Routes bind task, input, policy, and budget snapshots",
+        "Capability profiles are evaluated by task slice and model version",
+        "Calibrated gates choose escalation, review, or abstention after reversible cheap attempts",
+        "The verifier is the stop rule and all attempts and repairs count toward cost"
       ]
     },
     "next": {
-      "zh": "进入 model routing：capability profiles、confidence/calibration、cascades、escalation、ensemble disagreement、cost-quality frontier 与 route verification。",
-      "en": "Move into model routing: capability profiles, confidence and calibration, cascades, escalation, ensemble disagreement, cost-quality frontiers, and route verification."
+      "zh": "进入 research/computer-use architectures：搜索与浏览状态机、source ledger、claim graph、观察与动作、网页注入边界和证据停止条件。",
+      "en": "Move into research and computer-use architectures: search and browser state machines, source ledgers, claim graphs, observations and actions, web-injection boundaries, and evidence-based stop conditions."
     }
   }
 }
