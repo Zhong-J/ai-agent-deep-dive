@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-09",
-  "latestIssueDate": "2026-10-09",
+  "generatedAt": "2026-10-10",
+  "latestIssueDate": "2026-10-10",
   "completedTopics": [
     "reliability-slo-routing-economics",
     "tools-extension-security-eval",
@@ -18,6 +18,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-10",
+      "topicId": "advanced-research-computer-use-architecture",
+      "seriesId": "advanced-agent-systems",
+      "part": 3,
+      "complete": false
+    },
     {
       "date": "2026-10-09",
       "topicId": "advanced-model-routing-cascades",
@@ -196,24 +203,24 @@
   ],
   "pendingSeries": {
     "id": "advanced-agent-systems",
-    "nextPart": 3,
+    "nextPart": 4,
     "established": {
       "zh": [
-        "model route 绑定 task/input/policy/budget 快照",
-        "capability profile 按 task slice 和模型版本评测",
-        "可逆 cheap attempt 后用校准 gate 选择升级、复核或 abstain",
-        "verifier 是 stop rule，所有 attempts 与 repair 计入成本"
+        "research/computer use 共用部分可观测的 observation-action-verdict 回路",
+        "source ledger 记录原始 span、版本、时间与来源依赖",
+        "claim graph 显式保留支持、反驳和 unknown",
+        "浏览器行动绑定当前 tab/origin/snapshot，停止条件由证据策略决定"
       ],
       "en": [
-        "Routes bind task, input, policy, and budget snapshots",
-        "Capability profiles are evaluated by task slice and model version",
-        "Calibrated gates choose escalation, review, or abstention after reversible cheap attempts",
-        "The verifier is the stop rule and all attempts and repairs count toward cost"
+        "Research and computer use share a partially observed observation-action-verdict loop",
+        "Source ledgers retain original spans, versions, times, and source dependencies",
+        "Claim graphs preserve support, refutation, and unknown explicitly",
+        "Browser actions bind current tab, origin, and snapshot, while evidence policies define stopping"
       ]
     },
     "next": {
-      "zh": "进入 research/computer-use architectures：搜索与浏览状态机、source ledger、claim graph、观察与动作、网页注入边界和证据停止条件。",
-      "en": "Move into research and computer-use architectures: search and browser state machines, source ledgers, claim graphs, observations and actions, web-injection boundaries, and evidence-based stop conditions."
+      "zh": "完成本系列：bounded self-improvement、实验与评测隔离、版本化变更、发布门、回滚和不可由 Agent 自行扩大的权限边界。",
+      "en": "Complete the series with bounded self-improvement, experiment and evaluation isolation, versioned changes, release gates, rollback, and authority boundaries agents cannot expand themselves."
     }
   }
 }
