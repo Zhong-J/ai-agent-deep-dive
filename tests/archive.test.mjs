@@ -127,6 +127,18 @@ test("generated styles keep hidden archive search results out of layout", async 
   }
 });
 
+test("generated styles let mobile diagrams scroll at readable native width", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "deep-dive-mobile-diagram-"));
+  try {
+    await generateArchive({ outputDirectory: directory, issues: [fixture()] });
+    const styles = await readFile(join(directory, "assets", "styles.css"), "utf8");
+    assert.match(styles, /\.diagram\s*\{[^}]*overflow-x:\s*auto/);
+    assert.match(styles, /@media\(max-width:760px\)\s*\{[^}]*\.diagram svg\s*\{[^}]*min-width:\s*760px/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("generated pages declare a favicon without a network request", async () => {
   const directory = await mkdtemp(join(tmpdir(), "deep-dive-favicon-"));
   try {
