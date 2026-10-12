@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-11",
-  "latestIssueDate": "2026-10-11",
+  "generatedAt": "2026-10-12",
+  "latestIssueDate": "2026-10-12",
   "completedTopics": [
     "advanced-bounded-self-improvement",
     "reliability-slo-routing-economics",
@@ -20,6 +20,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-12",
+      "topicId": "long-context-rope-position-extrapolation",
+      "seriesId": "long-context-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-10-11",
       "topicId": "advanced-bounded-self-improvement",
@@ -210,5 +217,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "long-context-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "RoPE 将绝对位置施加为 Q/K 二维旋转，直接点积含相对位移",
+        "相对分数公式不保证模型在训练长度外可靠使用上下文",
+        "位置插值压缩相位与局部距离，长短任务均需回归",
+        "KV 复用绑定位置索引、模型版本与 scaling；容量、资源、有效长度分开验收"
+      ],
+      "en": [
+        "RoPE rotates Q and K pairs by absolute position, yielding relative offset in a direct dot product",
+        "The relative-score identity does not guarantee reliable use beyond training lengths",
+        "Position interpolation compresses phase and local distance, requiring long and short regressions",
+        "KV reuse binds position IDs, model version, and scaling; capacity, resources, and effective length are separate gates"
+      ]
+    },
+    "next": {
+      "zh": "Long Context Internals 2/3：从 attention 算术与内存 IO 出发，解释 FlashAttention 精确 tiling、sliding/sparse attention 的可见性取舍与长序列服务边界。",
+      "en": "Long Context Internals 2/3: explain attention arithmetic and memory IO, exact FlashAttention tiling, visibility trade-offs of sliding and sparse attention, and long-sequence serving limits."
+    }
+  }
 }
