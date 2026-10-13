@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-12",
-  "latestIssueDate": "2026-10-12",
+  "generatedAt": "2026-10-13",
+  "latestIssueDate": "2026-10-13",
   "completedTopics": [
     "advanced-bounded-self-improvement",
     "reliability-slo-routing-economics",
@@ -20,6 +20,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-13",
+      "topicId": "long-context-attention-io-sparsity",
+      "seriesId": "long-context-internals",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-10-12",
       "topicId": "long-context-rope-position-extrapolation",
@@ -219,24 +226,24 @@
   ],
   "pendingSeries": {
     "id": "long-context-internals",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "RoPE 将绝对位置施加为 Q/K 二维旋转，直接点积含相对位移",
-        "相对分数公式不保证模型在训练长度外可靠使用上下文",
-        "位置插值压缩相位与局部距离，长短任务均需回归",
-        "KV 复用绑定位置索引、模型版本与 scaling；容量、资源、有效长度分开验收"
+        "RoPE 位置结构与 FlashAttention 执行优化是不同层次",
+        "dense FlashAttention 保留全 QK 边并以 online softmax 省 HBM IO",
+        "sliding/sparse 删边近线性扩长但改变远证据的直接可见性",
+        "长窗口服务还受 KV 驻留、batch admission 与调度约束"
       ],
       "en": [
-        "RoPE rotates Q and K pairs by absolute position, yielding relative offset in a direct dot product",
-        "The relative-score identity does not guarantee reliable use beyond training lengths",
-        "Position interpolation compresses phase and local distance, requiring long and short regressions",
-        "KV reuse binds position IDs, model version, and scaling; capacity, resources, and effective length are separate gates"
+        "RoPE positional structure and FlashAttention execution optimization are different layers",
+        "Dense FlashAttention retains all QK edges while online softmax reduces HBM IO",
+        "Sliding and sparse patterns remove edges and distant direct visibility while scaling closer to linearly",
+        "Long-window service remains constrained by KV residency, batch admission, and scheduling"
       ]
     },
     "next": {
-      "zh": "Long Context Internals 2/3：从 attention 算术与内存 IO 出发，解释 FlashAttention 精确 tiling、sliding/sparse attention 的可见性取舍与长序列服务边界。",
-      "en": "Long Context Internals 2/3: explain attention arithmetic and memory IO, exact FlashAttention tiling, visibility trade-offs of sliding and sparse attention, and long-sequence serving limits."
+      "zh": "Long Context Internals 3/3：用位置切片、干扰、冲突、长短回归和业务终态证据评测有效上下文，并决定何时直接输入、检索或摘要。",
+      "en": "Long Context Internals 3/3: evaluate effective context with position slices, distractors, conflicts, long and short regressions, and business-outcome evidence, then choose direct input, retrieval, or summaries."
     }
   }
 }
