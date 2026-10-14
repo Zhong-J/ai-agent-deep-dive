@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-10-13",
-  "latestIssueDate": "2026-10-13",
+  "generatedAt": "2026-10-14",
+  "latestIssueDate": "2026-10-14",
   "completedTopics": [
+    "long-context-effective-use-evaluation",
     "advanced-bounded-self-improvement",
     "reliability-slo-routing-economics",
     "tools-extension-security-eval",
@@ -11,6 +12,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "long-context-internals",
     "advanced-agent-systems",
     "reliability-safety-internals",
     "tools-extensibility-internals",
@@ -20,6 +22,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-14",
+      "topicId": "long-context-effective-use-evaluation",
+      "seriesId": "long-context-internals",
+      "part": 3,
+      "complete": true
+    },
     {
       "date": "2026-10-13",
       "topicId": "long-context-attention-io-sparsity",
@@ -224,26 +233,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "long-context-internals",
-    "nextPart": 3,
-    "established": {
-      "zh": [
-        "RoPE 位置结构与 FlashAttention 执行优化是不同层次",
-        "dense FlashAttention 保留全 QK 边并以 online softmax 省 HBM IO",
-        "sliding/sparse 删边近线性扩长但改变远证据的直接可见性",
-        "长窗口服务还受 KV 驻留、batch admission 与调度约束"
-      ],
-      "en": [
-        "RoPE positional structure and FlashAttention execution optimization are different layers",
-        "Dense FlashAttention retains all QK edges while online softmax reduces HBM IO",
-        "Sliding and sparse patterns remove edges and distant direct visibility while scaling closer to linearly",
-        "Long-window service remains constrained by KV residency, batch admission, and scheduling"
-      ]
-    },
-    "next": {
-      "zh": "Long Context Internals 3/3：用位置切片、干扰、冲突、长短回归和业务终态证据评测有效上下文，并决定何时直接输入、检索或摘要。",
-      "en": "Long Context Internals 3/3: evaluate effective context with position slices, distractors, conflicts, long and short regressions, and business-outcome evidence, then choose direct input, retrieval, or summaries."
-    }
-  }
+  "pendingSeries": null
 }
