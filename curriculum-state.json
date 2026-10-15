@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-14",
-  "latestIssueDate": "2026-10-14",
+  "generatedAt": "2026-10-15",
+  "latestIssueDate": "2026-10-15",
   "completedTopics": [
     "long-context-effective-use-evaluation",
     "advanced-bounded-self-improvement",
@@ -22,6 +22,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-15",
+      "topicId": "moe-sparse-routing-training",
+      "seriesId": "moe-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-10-14",
       "topicId": "long-context-effective-use-evaluation",
@@ -233,5 +240,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "moe-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "MoE 在部分 Transformer 层以 router 按 token/层选择少数 FFN experts 并合并回 residual",
+        "top-k 稀疏化 expert FFN 算术，但共享层、总权重与通信仍在",
+        "expert capacity、overflow、负载均衡与梯度覆盖决定训练可用性",
+        "专家编号不是可解释 Agent 角色，内部路由不授予工具权限"
+      ],
+      "en": [
+        "At selected Transformer layers an MoE router chooses a few FFN experts per token and layer and combines outputs into the residual",
+        "Top-k sparsifies expert-FFN arithmetic while shared layers, total weights, and communication remain",
+        "Capacity, overflow, balancing, and gradient exposure determine usable training",
+        "Expert IDs are not interpretable agent roles and internal routing does not grant tool authority"
+      ]
+    },
+    "next": {
+      "zh": "MoE Internals 2/3：解释 expert parallelism、token permutation、all-to-all、batch skew、权重/KV 驻留、prefill/decode 与 Agent 工具循环的服务成本。",
+      "en": "MoE Internals 2/3: explain expert parallelism, token permutation, all-to-all, batch skew, weight and KV residency, prefill/decode, and serving cost in an agent tool loop."
+    }
+  }
 }

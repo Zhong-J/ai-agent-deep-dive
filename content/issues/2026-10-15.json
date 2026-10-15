@@ -1,0 +1,153 @@
+{
+  "date": "2026-10-15",
+  "slug": "moe-token-routing-and-expert-capacity",
+  "readingMinutes": 20,
+  "topicId": "moe-sparse-routing-training",
+  "series": {
+    "id": "moe-internals",
+    "title": {
+      "zh": "MoE Internals",
+      "en": "MoE Internals"
+    },
+    "part": 1,
+    "total": 3,
+    "complete": false
+  },
+  "title": {
+    "zh": "一个 token 被分给哪些专家，谁说了算？",
+    "en": "Who Decides Which Expert Processes a Token?"
+  },
+  "dek": {
+    "zh": "从 Transformer 的稀疏 FFN 出发，拆开 router logits、top-k、expert capacity、溢出、负载均衡与训练稳定性。",
+    "en": "Open the sparse FFN inside a Transformer: router logits, top-k dispatch, expert capacity, overflow, load balancing, and training stability."
+  },
+  "tags": [
+    "Mixture of Experts",
+    "Token routing",
+    "Top-k",
+    "Expert capacity",
+    "Load balancing"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>一个模型有八个 feed-forward experts，却每个 token 只激活两个。听起来像‘用两份算力享受八份能力’；真实系统还要回答：哪个 token 去哪个 expert？若同一批 token 都涌向一个 expert，排队、容量溢出与梯度稀疏会怎样影响质量？‘总参数多、活跃参数少’也不等于推理时只需存两份权重。</p><p>Mixture-of-Experts（MoE）的关键是<strong>条件计算</strong>。某些 Transformer 层把原本对所有 token 共享的一块 FFN，换成若干独立 FFN 和一个可训练 router。每个 token 在每一层依据其 hidden state 选少数 experts，执行这些 FFN，再将结果合并到 residual stream。Attention 等其他组件通常仍共享；这不是八个完整 LLM 在聊天，也不是 Agent runtime 挑选模型的路由器。</p><div class='callout'><strong>核心判断：</strong>MoE 的参数容量与每 token 算术可以解耦，但训练可用性由路由分布、容量政策与梯度覆盖决定。没有这些控制，稀疏激活会变成少数热门 experts 过载、其他 experts 学不到东西。</div>",
+        "en": "<p>A model has eight feed-forward experts yet activates only two per token. It sounds like eight experts' worth of capability for two experts' worth of compute. But who sends each token where? What if an entire batch prefers one expert, causing a queue or capacity overflow? What happens to training if the unused experts rarely receive gradients? 'Many total parameters, fewer active parameters' also does not mean inference only needs two experts' weights in memory.</p><p>Mixture-of-Experts, or MoE, implements <strong>conditional computation</strong>. At selected Transformer layers it replaces one shared feed-forward network with multiple independent FFNs and a trainable router. For each token and layer, the router uses that token's hidden state to select a few experts. Their outputs are combined back into the residual stream. Attention and many other components remain shared. This is neither eight full LLMs conversing nor the model-choice router of an agent runtime.</p><div class='callout'><strong>Core judgment:</strong> MoE decouples parameter capacity from arithmetic per token, but useful training depends on routing distribution, capacity policy, and gradient coverage. Without them, sparse activation can overload a few popular experts while others learn too little.</div>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "放回你已熟悉的两层路由",
+        "en": "Two kinds of routing you already know"
+      },
+      "html": {
+        "zh": "<p>前面的 Transformer 课讲过：attention 让位置之间通信，MLP/FFN 在每个位置独立变换特征，residual stream 保存层间状态。MoE 通常替换的是后者，而不是把 attention 或整个 token 生成循环交给不同 Agent。router 在一次前向计算里看见的是连续向量 x；它不是看了用户意图后做一条人类可读的‘数学题交数学专家’规则。不同层的 x 不同，同一个 token 可在不同层选不同 experts；下一次 decode 的新 token 又会重新路由。</p><p>10 月的 model-routing 一篇是在 Agent runtime 层按任务风险、成本、能力画像选一个模型或升级路径；MoE router 则在模型内部按 token、按层做稀疏 FFN 分配。前者有外部 verifier、权限和预算，后者优化训练损失与系统吞吐。混淆两层，会误以为一个 expert 能解释整个答案，或误以为选择了某个 expert 就授予了工具权限。expert 只是参数块，不是拥有独立目标、记忆、浏览器或审批权的 agent。</p><p>Long Context 系列又区分了可见边、内存 IO 与业务质量。MoE 也有相似分层：某层专家权重的<strong>总量</strong>、每 token 激活的<strong>算术</strong>、跨设备 dispatch 的<strong>通信</strong>、batch 中热门 expert 的<strong>尾延迟</strong>是不同账本。今天建立路由与训练机制；下一篇才把它放进真实 serving timeline。</p>",
+        "en": "<p>The Transformer lesson distinguished attention, which communicates across positions, from the MLP or FFN, which transforms features independently at each position, with the residual stream carrying state between layers. MoE usually replaces that FFN block. It does not assign attention or the whole generation loop to different agents. The router sees a continuous hidden vector x during one forward pass; it does not apply a human-readable rule such as 'send math questions to the math specialist.' Hidden vectors change by layer, so the same token can choose different experts in different layers. A newly decoded token is routed again.</p><p>The model-routing lesson operated at the agent runtime layer, selecting a model or escalation route by task risk, cost, and calibrated capability. An MoE router operates inside a model, per token and layer, allocating sparse FFN computation. The first is governed by external verification, permissions, and budgets; the second is trained through model losses and system constraints. Mixing them up invites false interpretations: one expert does not explain an entire answer, and choosing an expert does not grant tool authority. An expert is a parameter block, not an agent with its own goal, memory, browser, or approval rights.</p><p>The Long Context series also separated visibility edges, memory IO, and business quality. MoE needs similar accounting. <strong>Total</strong> expert weights, arithmetic <strong>activated per token</strong>, communication for cross-device dispatch, and tail latency at a hot expert are distinct. This issue establishes routing and training mechanics. The next issue places them on a real serving timeline.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "机制：router、dispatch、expert、combine",
+        "en": "Mechanism: router, dispatch, expert, combine"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 246' role='img' aria-labelledby='moe-zh-title moe-zh-desc'><title id='moe-zh-title'>一个 token 在 MoE 层的 top-2 路由</title><desc id='moe-zh-desc'>输入 hidden state 经 router 计算各 expert 分数，只选择 E2 和 E5；被选专家各自执行 FFN，输出按权重合并回 residual。未选 experts 仍有参数，但此 token 不执行它们。</desc><rect x='18' y='57' width='118' height='78' rx='5' fill='#26352f'/><rect x='165' y='57' width='122' height='78' rx='5' fill='#8a6a35'/><rect x='318' y='18' width='136' height='74' rx='5' fill='#2f6d57'/><rect x='318' y='106' width='136' height='74' rx='5' fill='#2f6d57'/><rect x='484' y='57' width='126' height='78' rx='5' fill='#d04a33'/><rect x='640' y='57' width='105' height='78' rx='5' fill='#26352f'/><g fill='white' font-size='15'><text x='37' y='89'>hidden x</text><text x='181' y='89'>router</text><text x='337' y='49'>E2 · FFN</text><text x='337' y='137'>E5 · FFN</text><text x='500' y='89'>加权合并</text><text x='653' y='89'>residual</text></g><g fill='white' font-size='12'><text x='181' y='113'>top-2 / capacity</text><text x='500' y='113'>α₂y₂ + α₅y₅</text></g><path d='M137 96H160 M288 96L313 55 M288 96L313 143 M455 55L478 96 M455 143L478 96 M611 96H635' fill='none' stroke='#69716c' stroke-width='2'/><text x='70' y='215' font-size='15' fill='#26352f'>未选 E1/E3/E4… 不计算此 token；下一层可重选</text></svg><figcaption>原创示意：图中 E2/E5 只是示例路由，不代表固定语义‘专长’；容量溢出如何处理取决于实现。手机可横向滑动。</figcaption></figure><h3>1. 先确定替换范围</h3><p>常见稀疏 Transformer 保留 embedding、attention、layer norm、residual 和最终输出投影，并在部分层把 dense FFN 替换成 E 个 FFN experts。每个 expert 通常有自己的权重矩阵，形状可与原 FFN 相似；共享 attention 在生成 token 时仍参与计算。‘总参数’把所有专家都算上，‘活跃参数’只计该 token 选中的专家和共享层，两者不应与 FLOPs、显存驻留直接画等号。</p><h3>2. Router 从 hidden state 给出分数</h3><p>对一个 token 的向量 x，router 做小矩阵乘得到 E 个 logits，经 softmax 得概率 p。top-k 选分数最高的 k 个 experts；top-1（Switch）和 top-2（GShard、Mixtral 类）是不同折中。选中的分数通常经归一化成为 combine weights，但具体归一化、噪声与温度依架构而变。路由依 token 和层变化，不能从一条自然语言句子直接推断哪个专家‘负责推理’。</p><h3>3. Dispatch 的单位是 batch 中的 token</h3><p>把 B×S 个位置展平成 T 个 token states，router 输出 T×E 的选择。实现按 expert 将 token 重排成各自连续 buffer，执行 expert FFN，再把结果 scatter 回原位置。训练在很多 devices 上时，专家权重可能分片，dispatch 会跨设备；这些移动可能吞掉条件计算节省的算术。今天仅确定语义：每个 token 的输出来自被选专家，未选专家本轮没有该 token 的 FFN 前向与对应梯度。</p><h3>4. Capacity 解决的是突发负载，不是语义</h3><p>若每个 expert 只预留 C 个 token 槽，某 expert 在当前 batch 收到 C+1 个分配就溢出。可丢掉溢出路径、改走备用 expert、加大 capacity、或用动态大小 buffer；不同方案改变吞吐、内存、可重复性和模型输出。训练论文中常用 capacity factor 让槽数略高于均值，代价是 padding 空间和可能的丢弃。即使平均负载均匀，语言或任务相关的 batch 也可能瞬时偏斜；只看全局平均不足以预测 overflow。</p><h3>5. Combine 回 residual，不是专家投票</h3><p>每个被选 expert 计算自己的 FFN(x)，router 权重加权求和成为该层 FFN 分支输出，再与原 x 作 residual addition。top-2 并非两个完整模型分别回答问题然后投票；它们处理的是同一位置的连续特征。某层输出会改变下一层 hidden state，下一层 router 可能改选其他专家。因此把专家编号解释成稳定可读的‘领域标签’，通常超出公式和日志能证明的范围。</p><h3>6. 为什么会塌缩</h3><p>若早期某 expert 被多选，它接收更多样本和梯度，能力提升后可能更常被 router 选中；冷门 expert 反而欠训练。热门 expert 容量溢出又使部分 token 路径丢失或退化。主任务 loss 不一定自动校正这种正反馈。训练要观察 expert 负载、概率、overflow、每 expert 梯度和按语言/任务切片的质量，而非只看 perplexity 总分。</p><h3>7. 负载均衡损失是一项有副作用的约束</h3><p>Switch Transformer 的 top-1 方案把硬分配比例 fᵢ 与平均 router 概率 Pᵢ 结合成辅助 loss，推动 experts 更均匀受训。硬 top-k 选择本身不可平滑求导，概率项提供可优化信号。系数过小难防塌缩，过大则可能强迫本应集中处理的 token 分流，损伤主任务；均匀利用不等于每个 expert 应有相同语义。Router logits 还可能数值不稳，噪声、精度和正则化需要随架构验证。ST-MoE 的稳定训练经验是作者实验，不是所有 MoE 的默认设置。</p><h3>8. Router 也可以反过来选</h3><p>Expert Choice Routing 让每个 expert 选择固定数量的 token，而一个 token 被几个 experts 接收可变；这直接控制 expert bucket，却改变每 token 计算与 combine 语义。DeepSeekMoE 论文又报告更细粒度 experts 和 shared experts，尝试让公共特征与专门特征分开。这些设计表明 top-k token-choice 并非唯一解，但任何新路由都要重新核对容量、活跃算术、梯度覆盖和服务通信，不能只比较总参数。</p><h3>9. 给 Agent 设计可诊断的切片</h3><p>在同样任务合同下，按代码、自然语言、工具 schema、长 tool output、多语言和罕见错误文本分层记录路由分布与任务质量。若一个 release 的工具调用 JSON 更易损坏，仅看专家负载均匀会漏掉问题；需比较 structured-output validity、引用正确、修复次数与最终 verified outcome。路由 trace 是诊断数据，不是授权或因果解释：token 落在 E5 不证明 E5 ‘负责’最终决定。</p>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 246' role='img' aria-labelledby='moe-en-title moe-en-desc'><title id='moe-en-title'>Top-two routing for one token in an MoE layer</title><desc id='moe-en-desc'>A hidden state enters the router, which scores experts and selects E2 and E5. Their FFNs run and their weighted outputs return to the residual stream. Unselected experts have parameters but do not process this token.</desc><rect x='18' y='57' width='118' height='78' rx='5' fill='#26352f'/><rect x='165' y='57' width='122' height='78' rx='5' fill='#8a6a35'/><rect x='318' y='18' width='136' height='74' rx='5' fill='#2f6d57'/><rect x='318' y='106' width='136' height='74' rx='5' fill='#2f6d57'/><rect x='484' y='57' width='126' height='78' rx='5' fill='#d04a33'/><rect x='640' y='57' width='105' height='78' rx='5' fill='#26352f'/><g fill='white' font-size='15'><text x='37' y='89'>hidden x</text><text x='181' y='89'>router</text><text x='337' y='49'>E2 · FFN</text><text x='337' y='137'>E5 · FFN</text><text x='500' y='89'>combine</text><text x='653' y='89'>residual</text></g><g fill='white' font-size='12'><text x='181' y='113'>top-2 / capacity</text><text x='500' y='113'>α₂y₂ + α₅y₅</text></g><path d='M137 96H160 M288 96L313 55 M288 96L313 143 M455 55L478 96 M455 143L478 96 M611 96H635' fill='none' stroke='#69716c' stroke-width='2'/><text x='60' y='215' font-size='15' fill='#26352f'>E1/E3/E4… inactive for this token; reroute next layer</text></svg><figcaption>Original diagram: E2 and E5 illustrate one route, not fixed semantic specialties. Overflow behavior is implementation-specific. Swipe horizontally on a phone.</figcaption></figure><h3>1. Bound the replaced component</h3><p>A typical sparse Transformer retains embeddings, attention, normalization, residual paths, and the final output projection. At selected layers it replaces one dense FFN with E expert FFNs. Each expert has its own weight matrices, often shaped like a standard FFN. Shared attention still participates when the model generates a token. Total parameters count every expert; active parameters count selected experts plus shared components for that token. Neither number by itself equals FLOPs or memory residency.</p><h3>2. Router scores a hidden state</h3><p>For one token vector x, a small router projection produces E logits, and a softmax produces probabilities p. Top-k selects the k highest-scoring experts. Top-one Switch-style and top-two GShard- or Mixtral-style routing make different trade-offs. Selected scores are commonly normalized into combine weights, but exact normalization, noise, and temperature depend on the architecture. Routing is per token and layer; a natural-language sentence is not enough to infer that a particular expert 'handles reasoning.'</p><h3>3. Dispatch operates on tokens in a batch</h3><p>Flatten B×S positions into T token states. Routing produces a T×E assignment pattern. An implementation groups tokens destined for each expert into contiguous buffers, runs its FFN, then scatters outputs back to original positions. When expert weights are partitioned across training devices, dispatch may cross devices; data movement can erase some arithmetic savings from conditional computation. The semantic point is narrower: selected experts process that token, while unselected experts get neither its FFN forward computation nor a corresponding gradient through that route.</p><h3>4. Capacity absorbs bursts, not semantics</h3><p>If an expert has C token slots in the current batch, assignment C+1 overflows. Systems may drop the overflowed route, use a backup expert, increase capacity, or use variable-size buffers. Each option changes throughput, memory, repeatability, and potentially model output. Training designs often reserve capacity modestly above expected average load through a capacity factor, paying for padding and possible drops. A balanced global average does not rule out a batch dominated by one language or task. Measure per-batch overflow, not only the global mean.</p><h3>5. Combine into a residual, not a vote</h3><p>Each selected expert computes its FFN(x); weighted expert outputs form that layer's FFN branch, which is added back to x through a residual path. Top-two does not mean two complete models independently answer a question and vote. They transform continuous features at the same token position. Their output changes the hidden state entering later layers, whose routers may select a different pair. Treating an expert ID as a stable, interpretable domain label generally goes beyond what the formula and a routing log establish.</p><h3>6. Why routing can collapse</h3><p>If one expert receives slightly more early tokens, it receives more examples and gradients. As it improves, the router may favor it even more. Cold experts remain undertrained. A hot expert may overflow, dropping or degrading some token paths. The main task loss need not automatically reverse this feedback. Inspect expert utilization, router probabilities, overflow, per-expert gradient exposure, and quality by language or task slice. Aggregate perplexity alone can hide an undertrained path.</p><h3>7. Load balancing is a constraint with side effects</h3><p>Switch Transformer uses an auxiliary top-one loss combining hard assignment fraction fᵢ with average router probability Pᵢ, encouraging more even training exposure. A hard top-k decision is not smoothly differentiable; the probability term supplies a trainable signal. Too little auxiliary pressure permits collapse. Too much can push tokens away from a useful concentration and hurt the main task. Equal utilization does not imply equal semantic specialties. Router logits can also be numerically unstable, so noise, precision, and regularization require architecture-specific tests. ST-MoE's stability recipes are author experiments, not defaults that work for every model.</p><h3>8. Routing can be reversed</h3><p>Expert Choice Routing gives each expert a fixed bucket of preferred tokens, while a token may reach a variable number of experts. That directly controls expert occupancy but changes compute per token and combine semantics. DeepSeekMoE reports finer-grained experts plus shared experts, aiming to separate common features from specialized ones. These papers show token-choice top-k is not the only design. Every alternative must recheck capacity, active arithmetic, gradient coverage, and communication before claiming an advantage from total parameter count.</p><h3>9. Diagnose agent-relevant slices</h3><p>With the same task contract, examine routes and outcomes for code, natural language, tool schemas, long tool output, multiple languages, and rare error messages. A release may have balanced expert loads while producing more malformed tool-call JSON; utilization alone misses that regression. Compare structured-output validity, citation accuracy, repair attempts, and verified task outcomes. A routing trace is diagnostic data, not permission or causal proof. Sending a token to E5 does not prove E5 'made' the final decision.</p>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "必要数学：稀疏计算与均衡约束",
+        "en": "Essential mathematics: sparse work and balanced exposure"
+      },
+      "html": {
+        "zh": "<p>给 token hidden state <strong>x∈Rᵈ</strong>、E 个 experts，router logits 为 <strong>z=Wᵣx</strong>，概率 <strong>pᵢ=exp(zᵢ)/Σⱼexp(zⱼ)</strong>。若选择集合 <strong>S=TopK(p,k)</strong>，一种常见合并为 <strong>y=Σ_{i∈S} αᵢFᵢ(x)</strong>，其中 Fᵢ 是第 i 个 expert FFN，αᵢ 是选中概率的归一化权重。不同模型可采用不同 combine 规则。计算 E 个小 router 分数，但只运行 k 个 FFN；若 k≪E，专家 FFN 算术大约随 k 而非 E 增长。共享层与通信仍在，故不是整模型 FLOPs 缩到 k/E。</p><p>对一个 batch 的 T 个 token，k 路由平均每 expert 约 <strong>kT/E</strong> 次分配。简化 capacity 为 <strong>C=ceil(c·kT/E)</strong>，c 是 capacity factor；实际实现可能按设备、组或 token-choice/expert-choice 定义。c 太小，热门专家溢出；太大，padding 和显存浪费。平均值不是最大值，不能用它证明所有 batch 都不会丢 token。</p><p>Switch top-1 的辅助项可写为 <strong>L_aux=λEΣᵢ fᵢPᵢ</strong>：λ 为权重，fᵢ 是硬分配到 expert i 的 token 比例，Pᵢ 是 batch 平均 router 概率。均匀时两者约 1/E；若概率与硬负载一起集中，损失增大。优化通过 Pᵢ 等可微路径影响 router；此式不是保证均匀、专精或质量的定理，也不能原样套在所有 top-k/共享 expert 架构上。</p>",
+        "en": "<p>For token hidden state <strong>x∈Rᵈ</strong> and E experts, router logits are <strong>z=Wᵣx</strong>, with probabilities <strong>pᵢ=exp(zᵢ)/Σⱼexp(zⱼ)</strong>. Let <strong>S=TopK(p,k)</strong>. One common combination is <strong>y=Σ_{i∈S} αᵢFᵢ(x)</strong>, where Fᵢ is expert i's FFN and αᵢ is a normalized weight over selected probabilities. Models may use different combine rules. Computing E small router scores still occurs, but only k FFNs run. For k much smaller than E, expert-FFN arithmetic scales roughly with k rather than E. Shared components and communication remain, so whole-model FLOPs do not simply become k/E of the dense alternative.</p><p>For T tokens in a batch and k routes per token, average assignments per expert are <strong>kT/E</strong>. A simplified capacity rule is <strong>C=ceil(c·kT/E)</strong> for capacity factor c. Actual implementations may define capacity per device or group and differ for token-choice and expert-choice routing. Too small c causes overflow at hot experts; too large c spends memory and padding. An average is not a maximum and cannot prove every batch avoids token drops.</p><p>A Switch-style top-one auxiliary term can be written <strong>L_aux=λEΣᵢ fᵢPᵢ</strong>. Here λ sets its strength, fᵢ is the hard fraction assigned to expert i, and Pᵢ is mean router probability for that expert in the batch. Both are about 1/E under uniform traffic. When probabilities and hard load concentrate together, the term grows. Optimization affects the router through differentiable paths such as Pᵢ. This expression guarantees neither balance nor specialization nor quality, and it should not be copied unchanged into every top-k or shared-expert architecture.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统的影响",
+        "en": "Implications for agent systems"
+      },
+      "html": {
+        "zh": "<p><strong>能力：</strong>MoE 可在每 token 只运行少数 FFN 的前提下增加总参数，为多语言、代码和多任务提供更大的可训练容量；但是否提升某类 Agent 任务取决于训练数据、路由与评测，不能从专家数推断。</p><p><strong>可靠性：</strong>工具 schema、长观察和少见异常可能造成与普通聊天不同的路由分布。若冷门路径欠训练或热门路径溢出，结构化动作输出、引用和异常恢复可能退化；需要按任务切片记录质量与容量指标。</p><p><strong>成本：</strong>活跃 FFN FLOPs 少，不代表总权重、通信或尾延迟少。expert weights 往往须在整个服务集群可用；下一篇将拆专家并行、跨设备 all-to-all、batch skew 和 decode 小 batch 的真实瓶颈。</p><p><strong>边界：</strong>内部 expert 路由不改变 Agent 工具权限，也不能当作答案解释。runtime 仍根据 task contract 决定模型、tool、审批和完成状态。</p>",
+        "en": "<p><strong>Capability:</strong> MoE can increase trainable parameter capacity while running only a few FFNs for each token, potentially supporting multilingual, code, and multitask patterns. Whether a particular agent task improves depends on data, routing, and evaluation, not expert count alone.</p><p><strong>Reliability:</strong> tool schemas, long observations, and rare error messages may produce routing distributions unlike ordinary chat. Cold undertrained paths or hot overflowing paths could degrade structured actions, citations, and recovery. Measure both quality and capacity by task slice.</p><p><strong>Cost:</strong> fewer active FFN FLOPs do not imply fewer total weights, less communication, or lower tail latency. Expert weights must remain available across the service system. Part 2 opens expert parallelism, cross-device all-to-all, batch skew, and small-batch decode bottlenecks.</p><p><strong>Boundary:</strong> internal expert routing does not change agent tool authority and is not an explanation of an answer. Runtime still decides model, tool, approval, and completion from the task contract.</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<ul><li><strong>把 experts 当完整小模型：</strong>它们通常只是层内 FFN；共享 attention、residual 和输出层不可忽略。</li><li><strong>用专家编号解释答案：</strong>路由是按 token/层的连续特征选择，不保证可读的领域分工。</li><li><strong>平均均衡掩盖 batch 热点：</strong>某语言/工具输出瞬时集中仍会 overflow；看 p95/p99 负载与丢弃。</li><li><strong>capacity 太小：</strong>路径丢失或改路由，训练与推理可能语义不一致；记录 policy 和 drop rate。</li><li><strong>auxiliary loss 太强：</strong>追求平均流量可能牺牲主任务或少见样本；联合评测质量与利用率。</li><li><strong>总参数当活跃算力：</strong>一个 token 只跑 k 个 FFN，仍要算共享层、router 和通信。</li><li><strong>活跃参数当显存需求：</strong>不同 token 可能选不同 experts，服务集群须可访问全体权重。</li><li><strong>把 Agent 模型路由与 MoE 混同：</strong>前者有策略/权限/验证，后者是内部可训练计算图。</li></ul>",
+        "en": "<ul><li><strong>Experts treated as complete small models:</strong> they are usually layer-local FFNs; shared attention, residual paths, and output layers still matter.</li><li><strong>Expert ID used to explain an answer:</strong> routing selects continuous features per token and layer, not guaranteed human-readable domains.</li><li><strong>Average balance hides hot batches:</strong> one language or tool-output pattern may still overflow. Track tail load and drops.</li><li><strong>Capacity too small:</strong> routes drop or change; training and inference may diverge. Log policy and drop rate.</li><li><strong>Auxiliary loss too strong:</strong> even traffic may harm the main task or rare cases. Evaluate quality with utilization.</li><li><strong>Total parameters mistaken for active compute:</strong> a token runs k FFNs, but shared layers, router, and communication remain.</li><li><strong>Active parameters mistaken for memory requirement:</strong> different tokens can select different experts; the service must access all weights across its devices.</li><li><strong>Agent model routing conflated with MoE:</strong> the former has policy, permission, and verification; the latter is an internal trainable computation graph.</li></ul>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可复用的技术判断",
+        "en": "Reusable technical judgments"
+      },
+      "html": {
+        "zh": "<ul><li>MoE 常把某些 Transformer FFN 换成多个 experts，router 按 token/层选 top-k；不是多 Agent 对话。</li><li>总参数、活跃 FFN 算术、全模型 FLOPs、权重驻留与通信是不同量。</li><li>expert capacity 是 batch 峰值问题；平均均衡仍可能有溢出和欠训练路径。</li><li>负载均衡辅助损失能抗塌缩，也可能与主任务冲突；要联合测质量、梯度覆盖与尾部负载。</li><li>专家路由日志可诊断 Agent 任务回归，但既非因果解释，也不提升工具权限。</li></ul>",
+        "en": "<ul><li>MoE commonly replaces selected Transformer FFNs with experts, with top-k routing per token and layer—not a multi-agent conversation.</li><li>Total parameters, active FFN work, whole-model FLOPs, weight residency, and communication are distinct.</li><li>Expert capacity is a batch-peak issue; balanced averages can still hide overflow and undertrained paths.</li><li>Auxiliary balancing can resist collapse but conflict with the main task. Evaluate quality, gradient exposure, and tail load together.</li><li>Routing logs help diagnose agent-task regressions but provide neither causal explanation nor tool authority.</li></ul>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "一手资料与证据等级",
+        "en": "Primary sources and evidence tiers"
+      },
+      "html": {
+        "zh": "<ul class='source-list'><li><a href='https://arxiv.org/abs/1701.06538'>Sparsely-Gated MoE</a> — 原作者提出稀疏 gating 与专家 FFN 的条件计算，性能为其语言模型/翻译实验。</li><li><a href='https://arxiv.org/abs/2006.16668'>GShard</a> — 作者报告 top-2 MoE 与自动 sharding 的多设备训练；不代表所有硬件都同样高效。</li><li><a href='https://arxiv.org/abs/2101.03961'>Switch Transformer</a> — 作者研究 top-1 路由、capacity、负载均衡与训练稳定性；速度收益依其基线。</li><li><a href='https://arxiv.org/abs/2202.08906'>ST-MoE</a> — 作者报告稀疏专家的稳定与迁移训练经验，不是通用默认配置。</li><li><a href='https://arxiv.org/abs/2202.09368'>Expert Choice Routing</a> — 作者提出 expert 反选 token 的固定 bucket，比较结果属其研究设置。</li><li><a href='https://arxiv.org/abs/2401.04088'>Mixtral of Experts</a> — 作者说明一个 decoder-only 模型的每 token top-2 FFN 选择；benchmark 是作者报告。</li><li><a href='https://arxiv.org/abs/2401.06066'>DeepSeekMoE</a> — 作者提出细粒度与 shared experts 并报告实验；本文不外推其百分比收益。</li></ul><p>本文的 Agent 切片、路由日志与授权边界是结合一手机制所作工程分析，不是上述论文对具体 Agent 系统的生产保证。</p>",
+        "en": "<ul class='source-list'><li><a href='https://arxiv.org/abs/1701.06538'>Sparsely-Gated MoE</a> — the original authors introduce conditional computation through sparse gating and expert FFNs; performance belongs to their language-model and translation experiments.</li><li><a href='https://arxiv.org/abs/2006.16668'>GShard</a> — the authors report top-two MoE and automatic sharding across devices; it does not establish equal efficiency on every platform.</li><li><a href='https://arxiv.org/abs/2101.03961'>Switch Transformer</a> — the authors examine top-one routing, capacity, balancing, and stability; speed gains depend on their baselines.</li><li><a href='https://arxiv.org/abs/2202.08906'>ST-MoE</a> — author-reported training recipes for stability and transfer, not universal defaults.</li><li><a href='https://arxiv.org/abs/2202.09368'>Expert Choice Routing</a> — the authors let experts select fixed token buckets; comparisons belong to their study.</li><li><a href='https://arxiv.org/abs/2401.04088'>Mixtral of Experts</a> — the authors describe per-token top-two FFN selection in one decoder-only model; benchmark results are author-reported.</li><li><a href='https://arxiv.org/abs/2401.06066'>DeepSeekMoE</a> — the authors propose fine-grained and shared experts and report experiments; percentage gains are not generalized here.</li></ul><p>The agent slices, routing-log diagnostics, and authorization boundary in this article are engineering analysis based on these primary mechanisms, not a production guarantee for an agent system.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "已建立与下一篇起点",
+        "en": "Established and next starting point"
+      },
+      "html": {
+        "zh": "<p><strong>今天已建立：</strong>MoE 在部分 Transformer 层用 trainable router 把 token hidden state 发给少数 FFN experts，按权重合并回 residual。top-k 稀疏化 FFN 算术；capacity、overflow、负载均衡与梯度覆盖决定训练是否可用。专家编号不等于可解释的任务角色，内部路由也不替 Agent 授权。</p><p><strong>尚未讲完：</strong>所有专家权重如何跨设备摆放？dispatch/all-to-all、热门 expert、prefill 与单 token decode、动态 batching 如何把‘低活跃 FLOPs’变成可能较高的尾延迟与显存需求？</p><p><strong>下一篇起点：</strong>MoE Internals 2/3 进入 serving：expert parallelism、token permutation、跨设备通信、batch skew、KV 与权重驻留及 Agent 工具循环的实际成本，不重复今天的训练 loss。</p>",
+        "en": "<p><strong>Established today:</strong> at selected Transformer layers a trainable router sends a token hidden state to a few FFN experts, combining weighted outputs back into the residual. Top-k sparsifies FFN arithmetic. Capacity, overflow, load balance, and gradient exposure determine whether training uses that capacity well. Expert IDs are not interpretable task roles, and internal routing does not authorize agent actions.</p><p><strong>Still unresolved:</strong> where do all expert weights live across devices? How do dispatch and all-to-all communication, hot experts, prefill versus single-token decode, and dynamic batching turn low active FLOPs into possibly high tail latency and memory residency?</p><p><strong>Next starting point:</strong> MoE Internals Part 2/3 opens serving: expert parallelism, token permutation, cross-device communication, batch skew, KV and weight residency, and costs of an agent tool loop without repeating today's training-loss mechanics.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "continues",
+    "established": {
+      "zh": [
+        "MoE 在部分 Transformer 层以 router 按 token/层选择少数 FFN experts 并合并回 residual",
+        "top-k 稀疏化 expert FFN 算术，但共享层、总权重与通信仍在",
+        "expert capacity、overflow、负载均衡与梯度覆盖决定训练可用性",
+        "专家编号不是可解释 Agent 角色，内部路由不授予工具权限"
+      ],
+      "en": [
+        "At selected Transformer layers an MoE router chooses a few FFN experts per token and layer and combines outputs into the residual",
+        "Top-k sparsifies expert-FFN arithmetic while shared layers, total weights, and communication remain",
+        "Capacity, overflow, balancing, and gradient exposure determine usable training",
+        "Expert IDs are not interpretable agent roles and internal routing does not grant tool authority"
+      ]
+    },
+    "next": {
+      "zh": "MoE Internals 2/3：解释 expert parallelism、token permutation、all-to-all、batch skew、权重/KV 驻留、prefill/decode 与 Agent 工具循环的服务成本。",
+      "en": "MoE Internals 2/3: explain expert parallelism, token permutation, all-to-all, batch skew, weight and KV residency, prefill/decode, and serving cost in an agent tool loop."
+    }
+  }
+}
