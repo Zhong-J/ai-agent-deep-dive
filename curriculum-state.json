@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-15",
-  "latestIssueDate": "2026-10-15",
+  "generatedAt": "2026-10-16",
+  "latestIssueDate": "2026-10-16",
   "completedTopics": [
     "long-context-effective-use-evaluation",
     "advanced-bounded-self-improvement",
@@ -22,6 +22,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-16",
+      "topicId": "moe-expert-parallel-serving",
+      "seriesId": "moe-internals",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-10-15",
       "topicId": "moe-sparse-routing-training",
@@ -242,24 +249,24 @@
   ],
   "pendingSeries": {
     "id": "moe-internals",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "MoE 在部分 Transformer 层以 router 按 token/层选择少数 FFN experts 并合并回 residual",
-        "top-k 稀疏化 expert FFN 算术，但共享层、总权重与通信仍在",
-        "expert capacity、overflow、负载均衡与梯度覆盖决定训练可用性",
-        "专家编号不是可解释 Agent 角色，内部路由不授予工具权限"
+        "expert parallelism 分片权重，token permutation 与两次 all-to-all 连接远端 FFN",
+        "最慢 expert 与 batch skew 决定同步尾部，平均负载不能保证 p99",
+        "prefill 的大 token/bandwidth 与 decode 的小 GEMM/固定通信开销不同",
+        "专家权重、expert cache 与每请求 KV 是分开的驻留账本，Agent 多轮重复付服务成本"
       ],
       "en": [
-        "At selected Transformer layers an MoE router chooses a few FFN experts per token and layer and combines outputs into the residual",
-        "Top-k sparsifies expert-FFN arithmetic while shared layers, total weights, and communication remain",
-        "Capacity, overflow, balancing, and gradient exposure determine usable training",
-        "Expert IDs are not interpretable agent roles and internal routing does not grant tool authority"
+        "Expert parallelism shards weights while token permutation and two all-to-alls connect remote FFNs",
+        "The slowest expert and batch skew shape synchronized tails; average balance cannot guarantee p99",
+        "Prefill's larger token and bandwidth load differs from decode's small GEMMs and fixed communication overhead",
+        "Expert weights, expert caches, and per-request KV are distinct residency ledgers, and agent turns repay serving costs"
       ]
     },
     "next": {
-      "zh": "MoE Internals 2/3：解释 expert parallelism、token permutation、all-to-all、batch skew、权重/KV 驻留、prefill/decode 与 Agent 工具循环的服务成本。",
-      "en": "MoE Internals 2/3: explain expert parallelism, token permutation, all-to-all, batch skew, weight and KV residency, prefill/decode, and serving cost in an agent tool loop."
+      "zh": "MoE Internals 3/3：以 matched quality、任务/语言/工具切片、路由漂移、p99 和每个 verified outcome 成本评价 MoE，对齐 Agent 的权限与终态验证边界。",
+      "en": "MoE Internals 3/3: evaluate MoE with matched quality, task/language/tool slices, routing drift, p99, and cost per verified outcome while preserving agent authority and terminal-verification boundaries."
     }
   }
 }
