@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-10-16",
-  "latestIssueDate": "2026-10-16",
+  "generatedAt": "2026-10-17",
+  "latestIssueDate": "2026-10-17",
   "completedTopics": [
+    "moe-quality-cost-drift-evaluation",
     "long-context-effective-use-evaluation",
     "advanced-bounded-self-improvement",
     "reliability-slo-routing-economics",
@@ -12,6 +13,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "moe-internals",
     "long-context-internals",
     "advanced-agent-systems",
     "reliability-safety-internals",
@@ -22,6 +24,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-17",
+      "topicId": "moe-quality-cost-drift-evaluation",
+      "seriesId": "moe-internals",
+      "part": 3,
+      "complete": true
+    },
     {
       "date": "2026-10-16",
       "topicId": "moe-expert-parallel-serving",
@@ -247,26 +256,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "moe-internals",
-    "nextPart": 3,
-    "established": {
-      "zh": [
-        "expert parallelism 分片权重，token permutation 与两次 all-to-all 连接远端 FFN",
-        "最慢 expert 与 batch skew 决定同步尾部，平均负载不能保证 p99",
-        "prefill 的大 token/bandwidth 与 decode 的小 GEMM/固定通信开销不同",
-        "专家权重、expert cache 与每请求 KV 是分开的驻留账本，Agent 多轮重复付服务成本"
-      ],
-      "en": [
-        "Expert parallelism shards weights while token permutation and two all-to-alls connect remote FFNs",
-        "The slowest expert and batch skew shape synchronized tails; average balance cannot guarantee p99",
-        "Prefill's larger token and bandwidth load differs from decode's small GEMMs and fixed communication overhead",
-        "Expert weights, expert caches, and per-request KV are distinct residency ledgers, and agent turns repay serving costs"
-      ]
-    },
-    "next": {
-      "zh": "MoE Internals 3/3：以 matched quality、任务/语言/工具切片、路由漂移、p99 和每个 verified outcome 成本评价 MoE，对齐 Agent 的权限与终态验证边界。",
-      "en": "MoE Internals 3/3: evaluate MoE with matched quality, task/language/tool slices, routing drift, p99, and cost per verified outcome while preserving agent authority and terminal-verification boundaries."
-    }
-  }
+  "pendingSeries": null
 }
