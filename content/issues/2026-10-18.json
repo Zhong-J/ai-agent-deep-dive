@@ -1,0 +1,153 @@
+{
+  "date": "2026-10-18",
+  "slug": "speculative-decoding-exact-verification",
+  "readingMinutes": 20,
+  "topicId": "speculative-decoding-exactness-and-speed",
+  "series": {
+    "id": "inference-optimization-internals",
+    "title": {
+      "zh": "Inference Optimization Internals",
+      "en": "Inference Optimization Internals"
+    },
+    "part": 1,
+    "total": 3,
+    "complete": false
+  },
+  "title": {
+    "zh": "小模型先猜，为什么大模型还能保证原来的分布？",
+    "en": "A Small Model Guesses First. How Does the Large Model Keep Its Distribution?"
+  },
+  "dek": {
+    "zh": "拆开 speculative decoding 的 draft、并行核验、接受/拒绝校正和真实加速条件，并接到 Agent 的工具调用边界。",
+    "en": "Open speculative decoding's draft, parallel verification, accept/reject correction, and real speed conditions, then connect them to agent tool boundaries."
+  },
+  "tags": [
+    "Speculative decoding",
+    "Rejection sampling",
+    "Draft model",
+    "Target verification",
+    "Agent runtime"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>普通 autoregressive decode 要等大模型生成第 1 个 token，才能算第 2 个；长回答因而走许多串行 target steps。Speculative decoding 让便宜的 draft model 先提出一段候选，大 target model 一次并行给这段各位置打分。若只是‘大模型看着差不多就接受’，输出分布会悄悄变成 draft 与 target 的混合，工具名、罕见否定词等尾部分支尤其可能被扭曲。真正精确的算法必须在拒绝时补回 draft 没有覆盖的概率质量。</p><p>今天的‘精确’有严格边界：在目标分布 p、draft 分布 q 可计算，采样规则一致、共享 token 空间且验证/校正正确实现的条件下，最终 token 序列的<strong>概率分布</strong>等于按目标模型逐 token 采样。它不表示同一个随机种子会产生逐字相同结果，也不保证任何任务答案正确。省的是 target 串行调用次数，代价是 draft 计算、候选验证、KV 状态管理和可能的拒绝回滚。</p><div class='callout'><strong>核心判断：</strong>draft 是可被拒绝的 proposal producer，target 与校正规则才决定已提交 token。只有接受率和硬件上的并行核验收益足以覆盖 draft 与调度开销，Agent 的端到端任务才可能更快。</div>",
+        "en": "<p>Ordinary autoregressive decoding must wait for a large model's first token before computing the next. A long answer therefore takes many serial target-model steps. Speculative decoding lets a cheap draft model propose several tokens, then has the large target score their positions in one parallel verification pass. If the system merely accepts tokens that 'look close enough,' its distribution silently becomes a draft-target mixture. Rare tool names and decisive negations may be distorted. An exact method must restore probability mass the draft missed when a proposal is rejected.</p><p>'Exact' has a precise boundary. If target distribution p and draft distribution q are available, the sampling policy is consistent, token space is shared, and verification and correction are implemented correctly, the resulting sequence has the <strong>same probability distribution</strong> as serial sampling from the target. It need not reproduce the identical text for the same random seed, nor guarantee a correct answer. The potential saving is fewer serial target calls; the costs are draft computation, candidate verification, KV state management, and possible rejection rollback.</p><div class='callout'><strong>Core judgment:</strong> the draft is a rejectable proposal producer. The target and correction rule decide committed tokens. An agent task becomes faster only if acceptance and hardware-efficient parallel verification outweigh drafting and scheduling overhead.</div>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "承接 sampling、KV 与 Agent 的外部动作",
+        "en": "Connecting sampling, KV, and external agent actions"
+      },
+      "html": {
+        "zh": "<p>此前 sampling 一篇已经把 logits、temperature、top-p、grammar mask 与最终 token 采样分开；KV 一篇解释 target decode 每步读旧缓存、单序列无法并行生成未来 token。speculation 并不打破自回归条件：draft 仍按自己的 q 串行提出候选；target 在已知整段候选后用 causal teacher-forced pass 同时计算这些位置的 p。接受只是核验已提出的路径，不能预先知道未提出的真实未来。</p><p>这与 Agent runtime 的 proposal/verification 边界类似，却发生在更内层。draft 的 token 还不是对用户可见的已确认输出，更不是可执行的 tool call。模型完成结构化动作后，外层 runtime 仍要解析、验证 schema、检查用户权限、幂等与业务后置条件。即使 speculative sampler 保留 target 分布，prompt injection、错误参数和未经授权的动作也不会因此消失。</p><p>前两天 MoE 的教训同样适用：‘单 token 算术少’不等于端到端快。speculative decoding 应比较 target-only 与 draft+target 在相同 target checkpoint、tokenizer、sampling policy、batch、prompt 长度和硬件上的 TTFT、ITL、p99 与 verified task outcome；否则模型质量、调度或上下文差异会混入加速结论。</p>",
+        "en": "<p>The sampling lesson separated logits, temperature, top-p, grammar masks, and final token choice. The KV lesson showed that target decoding reads old cache at each step and cannot generate a future token of one sequence before its predecessor. Speculation does not break autoregressive conditioning. The draft still proposes candidates serially under its own distribution q. Once the proposed block is known, the target runs a causal teacher-forced pass that scores the candidate positions together. Acceptance verifies that proposed path; the method cannot know an unproposed future.</p><p>This resembles the agent runtime's proposal and verification boundary, but at a lower layer. A draft token is not yet confirmed output to expose to a user and certainly is not an executable tool call. After a structured action is committed, the outer runtime still parses it, validates schema, checks user authority and idempotency, and confirms business postconditions. Preserving the target model's sampling distribution does not cure prompt injection, wrong arguments, or unauthorized actions.</p><p>The recent MoE lesson applies too: less arithmetic for one token is not synonymous with faster end-to-end work. Compare target-only with draft-plus-target under the same target checkpoint, tokenizer, sampling policy, batch, prompt length, and hardware. Measure time to first token, inter-token latency, p99, and verified task outcome; otherwise model quality, scheduling, or context differences contaminate the speed claim.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "机制：一轮 proposal 与精确核验",
+        "en": "Mechanism: one proposal and exact verification round"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 260' role='img' aria-labelledby='spec-zh-title spec-zh-desc'><title id='spec-zh-title'>draft 提案与 target 校正的一轮 speculative decoding</title><desc id='spec-zh-desc'>小 draft 串行提出四个候选 token。大 target 对候选前缀并行评分，按 p 与 q 的比率从左到右接受。第一个拒绝位置从正残差分布校正采样；只提交已核验的 token 与对应 KV。工具动作必须等外层 runtime 验证后执行。</desc><rect x='15' y='33' width='155' height='93' rx='5' fill='#26352f'/><rect x='195' y='33' width='170' height='93' rx='5' fill='#8a6a35'/><rect x='389' y='33' width='164' height='93' rx='5' fill='#2f6d57'/><rect x='576' y='33' width='167' height='93' rx='5' fill='#d04a33'/><g fill='white' font-size='15'><text x='31' y='67'>draft 串行提案</text><text x='211' y='67'>target 并行评分</text><text x='405' y='67'>逐位接受/校正</text><text x='592' y='67'>提交已核验前缀</text></g><g fill='white' font-size='12'><text x='31' y='95'>x₁ x₂ x₃ x₄ · q</text><text x='211' y='95'>p₁ p₂ p₃ p₄ p₅</text><text x='405' y='95'>min(1,p/q) · residual</text><text x='592' y='95'>KV commit · stop</text></g><path d='M171 81H190 M366 81H384 M554 81H571' stroke='#69716c' stroke-width='2'/><rect x='110' y='164' width='540' height='60' rx='5' fill='#e9e2d5'/><text x='137' y='191' font-size='16' fill='#19201d'>未核验 draft token 不进入用户流，也不触发 tool effect</text><text x='137' y='212' font-size='12' fill='#19201d'>reject 后裁剪候选/KV；all-accepted 时可多提交一个 target token</text></svg><figcaption>原创示意：四个候选仅作示例；核验与残差校正维持目标采样分布，外部工具仍受 runtime 授权。手机可横向滑动。</figcaption></figure><h3>1. 先定义目标分布而非目标答案</h3><p>在某个已提交 prefix h 上，target 模型加当前 temperature、top-p、grammar 等 decoding policy 后得到下一 token 分布 p(·|h)。draft 得 q(·|h)。经典算法要求候选与目标可在同一 token vocabulary 中比较概率；把完全不同 tokenizer 的小模型随手接上，不满足这一实现假设。目标分布 p 是系统希望精确保留的采样规则，不是‘正确答案’。</p><h3>2. Draft 生成 γ 个候选</h3><p>便宜模型从 h 开始逐个生成 x₁…xγ，保存每一步 qᵢ(xᵢ|h,x₁…xᵢ₋₁) 以及 draft KV。draft 仍承担 γ 次自回归步骤；只有它相对 target 足够便宜，且有较高概率猜中 target 的可能路径，才值得做。γ 越长，潜在一次 target pass 可提交越多 token，但更可能在中途拒绝，导致后半段 proposal 白做。</p><h3>3. Target 一次评分整段已知候选</h3><p>把 h 与候选一起送入 target 的 causal 前向。由于候选 tokens 已知，GPU 可对其位置并行算 logits，得到每一步 target 条件分布 pᵢ；还可得到全部接受时下一个位置 pγ₊₁。这里的并行是‘给已知路径打分’，不是大模型同时无条件生成未来。target verification pass 往往比一次单 token decode 更重，却可能远低于 γ 次串行 target decode 的 wall-clock 时间。</p><h3>4. 从左到右做接受检验</h3><p>对候选 xᵢ，若前面都已接受，以概率 aᵢ=min(1,pᵢ(xᵢ)/qᵢ(xᵢ)) 接受。target 比 draft 更偏好它时，比例可超过 1，接受概率截在 1；反之以相应概率拒绝。只要发生第一处拒绝，就停止核验后续候选，不能把‘后面某个 token 也很像 target’单独提交，因为它条件化在已被否定的 prefix 上。</p><h3>5. 拒绝时从正残差分布补质量</h3><p>第一处拒绝不能直接从 p 再抽一次，也不能把 draft token 换成 target argmax；两者都可能偏置最终分布。算法在该 prefix 上，从 r(x)∝max(0,p(x)−q(x)) 抽一个校正 token，再结束本轮。已接受前缀加校正 token 是本轮唯一可提交输出。若 γ 个候选全部接受，再从 pγ₊₁ 抽一个 bonus token；这让一次 target verification 最多前进 γ+1 个 token。</p><h3>6. 状态只能提交已核验部分</h3><p>draft 和 target 都可能临时计算候选位置的 KV；拒绝后，缓存、位置 ID、采样状态与流式输出必须裁剪到已接受前缀和校正 token。若服务端已经把未核验 token 流给用户，之后无法安全收回；若模型在未核验的 <code>tool_call</code> 片段处触发外部写入，就更无法回滚业务 effect。外层 runtime 只能把已确认、符合 schema 的完整动作交给权限 broker，严格停止在 tool 边界。</p><h3>7. Exact sampling、greedy 和 grammar 分别处理</h3><p>上述证明是对当前 target decoding policy 的概率分布成立。temperature 或 top-p 改变 p 后，接受率与校正也必须用改变后的分布计算；grammar mask 需要在相同 prefix 状态下施加，否则所谓 exact 保不住目标规则。greedy 是另一种特例：可让 target 验证 draft 候选是否等于目标逐位 argmax，直到首个不匹配；这不等同随机采样的 p/q 校正。实现若声称‘lossless’，必须说明保的是分布、greedy token 序列，还是仅任务质量。</p><h3>8. Draft 不一定是另一套完整模型</h3><p>小独立模型是经典方案；SpecInfer 研究候选树的并行验证，Medusa 用额外 decoding heads 产候选，EAGLE/ReDrafter 提出不同特征/循环 draft 设计，Lookahead 尝试不依赖独立 draft 模型。各论文的加速属于特定硬件、模型、batch 和任务的作者报告。树、heads 或特征路径改变 proposal 生成与核验成本，并不自动放宽 target 分布与 Agent 授权边界。</p><h3>9. 从 Agent 任务测收益</h3><p>按普通解释、代码、结构化 tool JSON、多语言和罕见异常文本测 target–draft 重合、接受前缀长度、拒绝位置、target verification 耗时、draft 费用、KV 回滚与 p99。工具调用常是短而高约束的输出，收益可能不同于长自然语言；Agent 还要付 retrieval、tool wait、下一轮 prefill 与 verifier。最终比较 target-only 与 speculation 在同一 task contract 下的 verified success、terminal latency 和总成本，不能只报告 decode token/s。</p>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 260' role='img' aria-labelledby='spec-en-title spec-en-desc'><title id='spec-en-title'>One speculative round from draft proposal to target correction</title><desc id='spec-en-desc'>A cheap draft proposes four tokens serially. The target scores the candidate prefixes in parallel. Acceptance proceeds left to right using the target-to-draft probability ratio. The first rejection samples from the positive residual distribution; only verified tokens and corresponding KV are committed. A tool effect waits for outer runtime authorization.</desc><rect x='15' y='33' width='155' height='93' rx='5' fill='#26352f'/><rect x='195' y='33' width='170' height='93' rx='5' fill='#8a6a35'/><rect x='389' y='33' width='164' height='93' rx='5' fill='#2f6d57'/><rect x='576' y='33' width='167' height='93' rx='5' fill='#d04a33'/><g fill='white' font-size='15'><text x='31' y='67'>draft serially</text><text x='211' y='67'>target scores block</text><text x='405' y='67'>accept / correct</text><text x='592' y='67'>commit verified</text></g><g fill='white' font-size='12'><text x='31' y='95'>x₁ x₂ x₃ x₄ · q</text><text x='211' y='95'>p₁ p₂ p₃ p₄ p₅</text><text x='405' y='95'>min(1,p/q) · residual</text><text x='592' y='95'>KV commit · stop</text></g><path d='M171 81H190 M366 81H384 M554 81H571' stroke='#69716c' stroke-width='2'/><rect x='110' y='164' width='540' height='60' rx='5' fill='#e9e2d5'/><text x='132' y='191' font-size='16' fill='#19201d'>Unverified draft tokens never stream or trigger tool effects</text><text x='132' y='212' font-size='12' fill='#19201d'>trim candidate/KV on reject; bonus target token if all accepted</text></svg><figcaption>Original diagram: four candidates are illustrative. Verification and residual correction preserve target sampling; external tools remain subject to runtime authorization. Swipe horizontally on a phone.</figcaption></figure><h3>1. Define a target distribution, not a target answer</h3><p>At a committed prefix h, apply the current temperature, top-p, grammar, and other decoding policy to target logits to obtain next-token distribution p(·|h). The draft has q(·|h). The classic algorithm needs comparable probabilities in a shared token vocabulary. An arbitrary smaller model with a different tokenizer is not a plug-in replacement without specialized machinery. The distribution p is the sampling rule to preserve, not the correct answer to the user's task.</p><h3>2. Draft γ candidates</h3><p>Starting from h, the cheap model proposes x₁ through xγ serially. Retain each conditional proposal probability qᵢ(xᵢ|h,x₁…xᵢ₋₁) and its temporary draft KV. The draft still pays γ autoregressive steps. It must be sufficiently cheaper than the target and overlap well with likely target paths to be useful. A longer γ raises the maximum number of tokens one target pass might commit, but also raises the chance that a rejection makes later draft work useless.</p><h3>3. Score the known block with the target</h3><p>Feed h plus the proposed tokens to a causal target forward pass. Because the candidate sequence is known, the GPU can score its positions together, producing target conditional distributions pᵢ and, if all proposals are accepted, a next-position pγ₊₁. This parallel work scores a known path; it is not unconditional generation of several futures by the target. Verification is usually heavier than one target decode step, but it may take much less wall-clock time than γ serial target decodes.</p><h3>4. Accept from left to right</h3><p>For candidate xᵢ, assuming previous candidates were accepted, accept with probability aᵢ=min(1,pᵢ(xᵢ)/qᵢ(xᵢ)). If the target favors the token more than the draft, the ratio exceeds one and acceptance is certain. Otherwise rejection occurs with the complement. Stop at the first rejection. A later draft token cannot be committed just because it also looks probable: it was conditioned on a prefix the verifier has rejected.</p><h3>5. Correct from positive residual mass</h3><p>At the first rejection, sampling a fresh token directly from p, or replacing the draft with target argmax, can bias the result. Instead sample a correction from r(x) proportional to max(0,p(x)−q(x)) at that prefix and end the round. The accepted prefix plus this correction is the only committed output. If all γ proposals pass, draw one bonus token from pγ₊₁. One target verification can then advance as many as γ+1 tokens.</p><h3>6. Commit only verified state</h3><p>Draft and target may both compute temporary KV for candidate positions. On rejection, trim caches, position IDs, sampler state, and output streaming to the accepted prefix and corrected token. A server that exposed unverified text cannot safely retract it; a tool call triggered by an unverified fragment may create an irreversible business effect. The outer runtime must wait for a complete, confirmed, schema-valid action before presenting it to a permission broker, stopping cleanly at tool boundaries.</p><h3>7. Sampling, greedy, and grammar differ</h3><p>The distributional proof applies to the selected target decoding policy. If temperature or top-p changes p, acceptance and correction must use the transformed distributions. A grammar mask must be applied consistently at the same prefix state or exactness to the intended target rule fails. Greedy decoding is a separate special case: the target can check draft tokens against its token-by-token argmax until the first mismatch. That is not the stochastic p/q correction. When an implementation says 'lossless,' ask whether it preserves a distribution, a greedy token sequence, or merely observed task quality.</p><h3>8. Drafting need not use a separate full model</h3><p>A small independent model is the classic path. SpecInfer explores parallel verification of candidate trees; Medusa adds decoding heads; EAGLE and ReDrafter propose feature-level or recurrent drafting; Lookahead explores acceleration without a separate draft model. Their speedups are author reports for particular hardware, models, batches, and tasks. Trees, heads, and features change proposal and verification cost, not the need to define target semantics or enforce the agent's external authority boundary.</p><h3>9. Evaluate actual agent tasks</h3><p>Slice ordinary explanations, code, structured tool JSON, languages, and rare error text. Track target–draft overlap, accepted-prefix length, first rejection position, target verification time, draft cost, KV rollback, and p99. Tool calls may be short and highly constrained, so their benefit can differ from a long prose response. An agent also pays retrieval, tool wait, next-turn prefill, and verification. Compare target-only and speculation on the same task contract using verified success, terminal latency, and total cost—not decode tokens per second alone.</p>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "必要数学：为什么拒绝后仍得到 p，以及何时加速",
+        "en": "Essential mathematics: why rejection still yields p, and when speed appears"
+      },
+      "html": {
+        "zh": "<p>先看一个位置。draft 以 q(x) 提出 token x，按 <strong>a(x)=min(1,p(x)/q(x))</strong> 接受；q(x)=0 的 token 不会被 draft 提出，比例只在 q(x)&gt;0 处用。直接接受某 x 的概率是 <strong>q(x)a(x)=min(p(x),q(x))</strong>。总接受率 <strong>A=Σ_x min(p(x),q(x))=1−TV(p,q)</strong>，TV 是两分布的 total variation distance。target 与 draft 越重合，A 越高。</p><p>拒绝剩余的概率质量为 <strong>1−A=Σ_x(p(x)−q(x))₊</strong>，其中 (u)₊=max(0,u)。从 <strong>r(x)=(p(x)−q(x))₊/(1−A)</strong> 抽样时，最终输出 x 的概率为 <strong>min(p(x),q(x))+(1−A)r(x)=p(x)</strong>。这就是校正证明；若 A=1 则不会拒绝，不需定义 r。多 token 情况在每个已接受 prefix 上重复该论证，首个拒绝即停止。因此精确性是相对目标采样分布，不是对业务事实的正确性保证。</p><p>粗略假设各候选条件接受率都近似 a，γ 个 draft 后每轮期望前进 token 数 <strong>E[K]≈Σ_{i=0}^{γ}aⁱ</strong>，包含拒绝时的校正或全接受时的 bonus。若 γ=4、a=0.8，值约 3.36；a 接近 0 则约 1。速度比近似 <strong>Speedup≈E[K]·t_target_one/(γ·t_draft_one+t_verify_block+t_overhead)</strong>。t 是目标单 token decode、draft 单 token、整段核验与状态/调度开销。公式忽略并行重叠、batch 竞争和长度相关 KV，必须以真实 TTFT/ITL/p99 验证。</p>",
+        "en": "<p>Consider one position. The draft proposes token x from q(x); accept it with <strong>a(x)=min(1,p(x)/q(x))</strong>. A token with q(x)=0 cannot be proposed, so the ratio is only needed where q is positive. The direct accepted probability of x is <strong>q(x)a(x)=min(p(x),q(x))</strong>. Total acceptance is <strong>A=Σ_x min(p(x),q(x))=1−TV(p,q)</strong>, where TV is total variation distance. More overlap between target and draft means higher A.</p><p>The rejected probability mass is <strong>1−A=Σ_x(p(x)−q(x))₊</strong>, where (u)₊ means max(0,u). Sample a correction from <strong>r(x)=(p(x)−q(x))₊/(1−A)</strong>. The final probability of x is <strong>min(p(x),q(x))+(1−A)r(x)=p(x)</strong>. This is the correction proof. When A=1, rejection never occurs and r need not be defined. For several tokens, apply the same argument at each accepted prefix and stop on the first rejection. Exactness is relative to the target sampling distribution, not a guarantee of business truth.</p><p>For intuition, suppose conditional acceptance is approximately a at each draft position. After γ proposals, expected committed progress per round is <strong>E[K]≈Σ_{i=0}^{γ}aⁱ</strong>, including a correction on rejection or a bonus token when all proposals pass. At γ=4 and a=0.8 this is about 3.36 tokens; near-zero a yields about one. Approximate speedup is <strong>E[K]·t_target_one/(γ·t_draft_one+t_verify_block+t_overhead)</strong>. The t terms are one target decode, one draft decode, target block verification, and state or scheduling overhead. This ignores overlap, batch contention, and length-dependent KV, so real TTFT, ITL, and p99 must decide.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统的影响",
+        "en": "Implications for agent systems"
+      },
+      "html": {
+        "zh": "<p><strong>能力：</strong>正确实现的精确 sampler 不需要改变目标分布或重新训练 target，就可能减少长自然语言/代码输出的串行目标调用；但不提供更强推理、事实性或工具权限。</p><p><strong>可靠性：</strong>draft token、target 核验结果、已提交 token 和外部 action 是四种不同状态。流式 UI 与 tool broker 不能越过核验边界；拒绝时 cache、位置、grammar state 必须一致回滚。</p><p><strong>性能：</strong>draft/target overlap 随任务、语言、温度、grammar 与模型版本变化。高接受率也不保证加速，若 draft 本身昂贵、验证块占 GPU、batch 受内存限制或 p99 排队增加，系统可能更慢。</p><p><strong>成本：</strong>按 Agent 全轮次比较 target-only 与 speculative route，计入 draft 资源、目标核验、失败修复、工具等待和最终 verifier；优化每个 verified outcome，而非只看单次 decode 吞吐。</p>",
+        "en": "<p><strong>Capability:</strong> a correctly implemented exact sampler can reduce serial target calls for long prose or code output without retraining the target or changing its distribution. It does not add reasoning strength, factuality, or tool permission.</p><p><strong>Reliability:</strong> draft token, target verification result, committed token, and external action are four distinct states. Streaming UI and tool brokers must not cross the verification boundary. Rejection requires consistent rollback of cache, positions, and grammar state.</p><p><strong>Performance:</strong> draft–target overlap changes with task, language, temperature, grammar, and model version. Even high acceptance does not ensure speed if the draft is costly, block verification occupies the GPU, batching becomes memory-constrained, or p99 queueing grows.</p><p><strong>Cost:</strong> compare target-only and speculative routes across all agent turns, including draft resources, target verification, repair, tool waits, and the final verifier. Optimize per verified outcome rather than one-call decode throughput.</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<ul><li><strong>高 draft 命中率等于必快：</strong>核验块、draft、KV 和 batch 开销可能超过省掉的 target steps；测端到端。</li><li><strong>直接接受‘看起来对’的 token：</strong>改变目标分布；按 p/q 接受并用正残差校正。</li><li><strong>拒绝后继续用后续 proposal：</strong>后续 token 条件化于错误 prefix，必须截断。</li><li><strong>‘lossless’等于同 seed 同文字：</strong>精确保分布不必保随机样本路径；明确合同。</li><li><strong>不同 tokenizer 随手拼接：</strong>经典校正要求可比较的 token 概率；需兼容 draft 设计。</li><li><strong>grammar/top-p 只施加一边：</strong>目标规则和校正不一致；在相同 prefix 上计算处理后的 p、q。</li><li><strong>未核验 draft 先流出或触发 tool：</strong>拒绝后无法撤销用户看到的错误文本或外部 effect。</li><li><strong>只在长回答测速：</strong>Agent 的短结构化工具调用与多轮 prefill 可能没有同样收益。</li></ul>",
+        "en": "<ul><li><strong>High draft hit rate guarantees speed:</strong> verification, drafting, KV, and batch costs may outweigh saved target steps. Measure end to end.</li><li><strong>Accept a token that 'looks right':</strong> this changes the target distribution. Use p/q acceptance and positive-residual correction.</li><li><strong>Continue after a rejection:</strong> later proposals depend on the rejected prefix and must be discarded.</li><li><strong>'Lossless' means same seed and same text:</strong> exact distribution need not preserve the same random trajectory. State the contract.</li><li><strong>Plug in a different tokenizer:</strong> classic correction needs comparable token probabilities. Use a compatible drafting design.</li><li><strong>Apply grammar or top-p on only one side:</strong> target semantics and correction diverge. Compute processed p and q at the same prefix.</li><li><strong>Stream or execute an unverified draft:</strong> rejection cannot retract text already shown or an external business effect.</li><li><strong>Benchmark only long answers:</strong> an agent's short structured tool calls and repeated prefill may gain less.</li></ul>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可复用的技术判断",
+        "en": "Reusable technical judgments"
+      },
+      "html": {
+        "zh": "<ul><li>draft 串行提案、target 并行评分；精确性来自 p/q 接受率与拒绝后的正残差采样。</li><li>保留的是 target decoding policy 的输出分布，不是同 seed 的同一文本，更不是答案正确性。</li><li>接受率受 p/q 重合影响；真实加速还取决于 draft、核验、KV、batch 与 p99。</li><li>首个拒绝后截断后续候选，缓存和 grammar state 只提交已核验前缀。</li><li>Agent 的工具动作只由已确认输出交给外层授权与 verifier，不能让 draft 触发副作用。</li></ul>",
+        "en": "<ul><li>The draft proposes serially and the target scores a block; exactness comes from p/q acceptance and positive-residual correction on rejection.</li><li>The preserved object is the target decoding policy's output distribution, not identical seeded text or answer correctness.</li><li>Acceptance depends on p/q overlap; real speed also depends on draft, verification, KV, batching, and p99.</li><li>After the first rejection, discard later candidates and commit cache and grammar state only for verified tokens.</li><li>Only confirmed output reaches an outer authorization broker and verifier; drafts cannot trigger agent side effects.</li></ul>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "一手资料与证据等级",
+        "en": "Primary sources and evidence tiers"
+      },
+      "html": {
+        "zh": "<ul class='source-list'><li><a href='https://arxiv.org/abs/2211.17192'>Fast Inference from Transformers via Speculative Decoding</a> — 作者提出精确 speculative 算法及其目标分布证明；加速数字属其 T5 实验。</li><li><a href='https://arxiv.org/abs/2302.01318'>Speculative Sampling</a> — 作者提出修改后的 rejection sampling，并在其大模型/分布式设置报告速度。</li><li><a href='https://arxiv.org/abs/2305.09781'>SpecInfer</a> — 作者提出候选树与 target 并行核验；收益依其服务系统。</li><li><a href='https://arxiv.org/abs/2401.10774'>Medusa</a> — 作者用额外 decoding heads 提候选，区分不同训练/接受方案；不可混称全都严格同分布。</li><li><a href='https://arxiv.org/abs/2401.15077'>EAGLE</a> 与 <a href='https://arxiv.org/abs/2403.09919'>ReDrafter</a> — 作者提出特征/循环草拟变体并报告指定模型与硬件收益。</li><li><a href='https://arxiv.org/abs/2402.02057'>Lookahead Decoding</a> — 作者研究无独立 draft 的并行精确路径；不是经典 p/q 接受规则的同义名称。</li></ul><p>Agent 工具边界、终态成本账本和切片验收是本文从算法性质导出的编辑性工程设计，不是上述论文在具体业务系统中的验证结果。</p>",
+        "en": "<ul class='source-list'><li><a href='https://arxiv.org/abs/2211.17192'>Fast Inference from Transformers via Speculative Decoding</a> — the authors introduce the exact speculative algorithm and target-distribution argument; reported acceleration is from their T5 experiments.</li><li><a href='https://arxiv.org/abs/2302.01318'>Speculative Sampling</a> — the authors present modified rejection sampling and speed measurements in their large-model distributed setting.</li><li><a href='https://arxiv.org/abs/2305.09781'>SpecInfer</a> — the authors propose candidate trees with parallel target verification; performance depends on their serving system.</li><li><a href='https://arxiv.org/abs/2401.10774'>Medusa</a> — the authors use extra decoding heads and distinguish training and acceptance schemes; these should not all be called strictly distribution-identical.</li><li><a href='https://arxiv.org/abs/2401.15077'>EAGLE</a> and <a href='https://arxiv.org/abs/2403.09919'>ReDrafter</a> — the authors report feature-level or recurrent drafting variants on specified models and hardware.</li><li><a href='https://arxiv.org/abs/2402.02057'>Lookahead Decoding</a> — the authors study an exact parallel path without a separate draft model, not merely another name for classic p/q acceptance.</li></ul><p>Agent tool boundaries, terminal cost accounting, and slice-based acceptance are editorial systems design derived from the algorithm, not verified business-system results in these papers.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "已建立与下一篇起点",
+        "en": "Established and next starting point"
+      },
+      "html": {
+        "zh": "<p><strong>今天已建立：</strong>draft 在同一 token 空间按 q 提 γ 个候选；target 对已知候选做 causal 并行评分；从左到右按 min(1,p/q) 接受，首拒从 (p−q)₊ 校正，全接受可多拿一个 target token。正确实现保留目标采样分布，却不保同 seed 文本、事实或 Agent 权限。draft/target/KV/流式输出必须只提交已核验前缀。</p><p><strong>尚未讲完：</strong>减少串行 decode step 之外，模型还有什么数值表示和带宽瓶颈？weight、activation 与 KV quantization 怎样降低驻留和搬运，calibration/outlier、kernel 与质量回归又如何限定收益？</p><p><strong>下一篇起点：</strong>Inference Optimization Internals 2/3 进入量化：权重/激活/KV 的尺度、误差传播、内存带宽、算子支持与 Agent 任务切片；不重复今天的 speculative 接受证明。</p>",
+        "en": "<p><strong>Established today:</strong> a draft proposes γ tokens from q in a shared token space; the target causally scores the known block in parallel. Accept left to right with min(1,p/q), correct the first rejection from positive residual (p−q)₊, and take an extra target token if all pass. Correct implementation preserves the target sampling distribution, not identical seeded text, facts, or agent authority. Draft, target, KV, and streaming state commit only the verified prefix.</p><p><strong>Still unresolved:</strong> beyond reducing serial decode steps, what numerical representation and bandwidth bottlenecks remain? How do weight, activation, and KV quantization reduce residency and transfers, and how do calibration, outliers, kernels, and quality regressions bound their benefits?</p><p><strong>Next starting point:</strong> Inference Optimization Internals Part 2/3 enters quantization: scales for weights, activations, and KV, error propagation, memory bandwidth, operator support, and agent-task slices without repeating today's acceptance proof.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "continues",
+    "established": {
+      "zh": [
+        "draft 串行提出同 token 空间候选，target 并行评分已知候选前缀",
+        "按 min(1,p/q) 接受并在首拒时用 (p−q)₊ 校正可保目标采样分布",
+        "精确分布不保证同 seed 文本、答案正确或 Agent 工具权限",
+        "收益取决于重合、draft/核验/KV/batch 成本，未核验输出不可流式执行"
+      ],
+      "en": [
+        "A draft proposes serial candidates in a shared token space while the target scores known candidate prefixes in parallel",
+        "Acceptance by min(1,p/q) and positive-residual correction at first rejection preserve the target sampling distribution",
+        "Exact distribution does not guarantee identical seeded text, answer correctness, or agent tool authority",
+        "Gain depends on overlap and draft/verification/KV/batch cost; unverified output cannot stream or execute"
+      ]
+    },
+    "next": {
+      "zh": "Inference Optimization Internals 2/3：解释权重、激活与 KV 量化的尺度、误差、outlier、带宽和 kernel 支持，并用 Agent 任务切片验证质量与速度。",
+      "en": "Inference Optimization Internals 2/3: explain scales, error, outliers, bandwidth, and kernel support for weight, activation, and KV quantization, then validate quality and speed on agent-task slices."
+    }
+  }
+}
