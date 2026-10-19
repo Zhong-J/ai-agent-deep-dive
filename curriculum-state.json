@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-18",
-  "latestIssueDate": "2026-10-18",
+  "generatedAt": "2026-10-19",
+  "latestIssueDate": "2026-10-19",
   "completedTopics": [
     "moe-quality-cost-drift-evaluation",
     "long-context-effective-use-evaluation",
@@ -24,6 +24,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-19",
+      "topicId": "inference-quantization-scales-outliers-kv",
+      "seriesId": "inference-optimization-internals",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-10-18",
       "topicId": "speculative-decoding-exactness-and-speed",
@@ -265,24 +272,24 @@
   ],
   "pendingSeries": {
     "id": "inference-optimization-internals",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "draft 串行提出同 token 空间候选，target 并行评分已知候选前缀",
-        "按 min(1,p/q) 接受并在首拒时用 (p−q)₊ 校正可保目标采样分布",
-        "精确分布不保证同 seed 文本、答案正确或 Agent 工具权限",
-        "收益取决于重合、draft/核验/KV/batch 成本，未核验输出不可流式执行"
+        "权重、激活、KV 是不同的驻留与计算路径，位宽不能直接推导端到端收益",
+        "scale 粒度、outlier、饱和与 kernel 支持共同决定误差和速度",
+        "W4A16、W8A8 与低位 KV 对应不同瓶颈和不同质量风险",
+        "量化不保留目标采样分布，必须以 Agent 切片的 verified outcome、尾延迟和总成本验收"
       ],
       "en": [
-        "A draft proposes serial candidates in a shared token space while the target scores known candidate prefixes in parallel",
-        "Acceptance by min(1,p/q) and positive-residual correction at first rejection preserve the target sampling distribution",
-        "Exact distribution does not guarantee identical seeded text, answer correctness, or agent tool authority",
-        "Gain depends on overlap and draft/verification/KV/batch cost; unverified output cannot stream or execute"
+        "Weights, activations, and KV have different residency and compute paths; bit width alone cannot predict end-to-end gain",
+        "Scale granularity, outliers, saturation, and kernel support jointly determine error and speed",
+        "W4A16, W8A8, and low-bit KV target different bottlenecks and quality risks",
+        "Quantization does not preserve the target distribution and needs agent-slice verified outcomes, tail latency, and total-cost acceptance"
       ]
     },
     "next": {
-      "zh": "Inference Optimization Internals 2/3：解释权重、激活与 KV 量化的尺度、误差、outlier、带宽和 kernel 支持，并用 Agent 任务切片验证质量与速度。",
-      "en": "Inference Optimization Internals 2/3: explain scales, error, outliers, bandwidth, and kernel support for weight, activation, and KV quantization, then validate quality and speed on agent-task slices."
+      "zh": "Inference Optimization Internals 3/3：从 serving scheduler 解释 prefill/decode 混合、continuous batching、KV 管理、p99 与公平性，并完成 speculative 加量化的端到端 Agent 验收。",
+      "en": "Inference Optimization Internals 3/3: explain mixed prefill/decode, continuous batching, KV management, p99, and fairness through the serving scheduler, then complete end-to-end agent acceptance for speculation plus quantization."
     }
   }
 }
