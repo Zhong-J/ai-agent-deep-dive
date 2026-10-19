@@ -139,6 +139,17 @@ test("generated styles let mobile diagrams scroll at readable native width", asy
   }
 });
 
+test("generated styles wrap long inline equations on narrow screens", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "deep-dive-equation-wrap-"));
+  try {
+    await generateArchive({ outputDirectory: directory, issues: [fixture()] });
+    const styles = await readFile(join(directory, "assets", "styles.css"), "utf8");
+    assert.match(styles, /\.section-copy strong\s*\{[^}]*overflow-wrap:\s*anywhere/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("generated pages declare a favicon without a network request", async () => {
   const directory = await mkdtemp(join(tmpdir(), "deep-dive-favicon-"));
   try {
