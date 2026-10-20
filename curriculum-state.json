@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-10-19",
-  "latestIssueDate": "2026-10-19",
+  "generatedAt": "2026-10-20",
+  "latestIssueDate": "2026-10-20",
   "completedTopics": [
+    "inference-serving-scheduling-goodput-agent-acceptance",
     "moe-quality-cost-drift-evaluation",
     "long-context-effective-use-evaluation",
     "advanced-bounded-self-improvement",
@@ -13,6 +14,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "inference-optimization-internals",
     "moe-internals",
     "long-context-internals",
     "advanced-agent-systems",
@@ -24,6 +26,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-20",
+      "topicId": "inference-serving-scheduling-goodput-agent-acceptance",
+      "seriesId": "inference-optimization-internals",
+      "part": 3,
+      "complete": true
+    },
     {
       "date": "2026-10-19",
       "topicId": "inference-quantization-scales-outliers-kv",
@@ -270,26 +279,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "inference-optimization-internals",
-    "nextPart": 3,
-    "established": {
-      "zh": [
-        "权重、激活、KV 是不同的驻留与计算路径，位宽不能直接推导端到端收益",
-        "scale 粒度、outlier、饱和与 kernel 支持共同决定误差和速度",
-        "W4A16、W8A8 与低位 KV 对应不同瓶颈和不同质量风险",
-        "量化不保留目标采样分布，必须以 Agent 切片的 verified outcome、尾延迟和总成本验收"
-      ],
-      "en": [
-        "Weights, activations, and KV have different residency and compute paths; bit width alone cannot predict end-to-end gain",
-        "Scale granularity, outliers, saturation, and kernel support jointly determine error and speed",
-        "W4A16, W8A8, and low-bit KV target different bottlenecks and quality risks",
-        "Quantization does not preserve the target distribution and needs agent-slice verified outcomes, tail latency, and total-cost acceptance"
-      ]
-    },
-    "next": {
-      "zh": "Inference Optimization Internals 3/3：从 serving scheduler 解释 prefill/decode 混合、continuous batching、KV 管理、p99 与公平性，并完成 speculative 加量化的端到端 Agent 验收。",
-      "en": "Inference Optimization Internals 3/3: explain mixed prefill/decode, continuous batching, KV management, p99, and fairness through the serving scheduler, then complete end-to-end agent acceptance for speculation plus quantization."
-    }
-  }
+  "pendingSeries": null
 }
