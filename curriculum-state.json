@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-20",
-  "latestIssueDate": "2026-10-20",
+  "generatedAt": "2026-10-21",
+  "latestIssueDate": "2026-10-21",
   "completedTopics": [
     "inference-serving-scheduling-goodput-agent-acceptance",
     "moe-quality-cost-drift-evaluation",
@@ -26,6 +26,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-21",
+      "topicId": "retrieval-candidate-generation-index-recall",
+      "seriesId": "retrieval-rag-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-10-20",
       "topicId": "inference-serving-scheduling-goodput-agent-acceptance",
@@ -279,5 +286,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "retrieval-rag-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "外部文档先解析切块，候选必须保留 parent、span、版本与当前授权",
+        "BM25 的词项锚点与 dense 的语义邻居互补，ANN 只近似向量空间 top-k",
+        "索引近邻召回、人工证据召回与最终答案质量是三种不同指标",
+        "若正确证据没进入授权候选池，后续重排和生成不能可靠补救"
+      ],
+      "en": [
+        "External documents are parsed and chunked; candidates retain parent, span, version, and current authorization",
+        "BM25 term anchors complement dense semantic neighbors, while ANN only approximates vector-space top-k",
+        "Index-neighbor recall, judged-evidence recall, and final answer quality are distinct metrics",
+        "If correct evidence misses the authorized candidate pool, later reranking and generation cannot reliably repair it"
+      ]
+    },
+    "next": {
+      "zh": "Retrieval & RAG Internals 2/3：从授权候选集进入 reranker、query rewrite、融合与证据包装，分析多跳、冲突和 context 预算。",
+      "en": "Retrieval & RAG Internals 2/3: move from authorized candidates to reranking, query rewriting, fusion, and evidence packaging, including multi-hop, conflicts, and context budgets."
+    }
+  }
 }
