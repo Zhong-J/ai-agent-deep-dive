@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-10-22",
-  "latestIssueDate": "2026-10-22",
+  "generatedAt": "2026-10-23",
+  "latestIssueDate": "2026-10-23",
   "completedTopics": [
+    "retrieval-grounded-generation-evaluation-safety",
     "inference-serving-scheduling-goodput-agent-acceptance",
     "moe-quality-cost-drift-evaluation",
     "long-context-effective-use-evaluation",
@@ -14,6 +15,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "retrieval-rag-internals",
     "inference-optimization-internals",
     "moe-internals",
     "long-context-internals",
@@ -26,6 +28,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-23",
+      "topicId": "retrieval-grounded-generation-evaluation-safety",
+      "seriesId": "retrieval-rag-internals",
+      "part": 3,
+      "complete": true
+    },
     {
       "date": "2026-10-22",
       "topicId": "retrieval-reranking-fusion-evidence-packing",
@@ -293,26 +302,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "retrieval-rag-internals",
-    "nextPart": 3,
-    "established": {
-      "zh": [
-        "RRF 融合不同召回路线名次，不能验证事实或解决版本冲突",
-        "cross-encoder 与 ColBERT 的更细交互需要不同候选规模、存储和延迟预算",
-        "query rewrite 与第二跳是受限补检，HyDE 伪文档不能成为证据",
-        "最终证据包在 token 预算内保留来源 span、版本、覆盖与冲突，不能简单 top-m 截断"
-      ],
-      "en": [
-        "RRF fuses ranks from retrieval routes but cannot verify facts or resolve version conflicts",
-        "Cross-encoders and ColBERT use finer interaction with different candidate-size, storage, and latency budgets",
-        "Query rewriting and second hops are bounded recovery; HyDE hypotheses cannot become evidence",
-        "Final evidence bundles preserve source spans, versions, coverage, and conflicts within a token budget rather than top-m truncation"
-      ]
-    },
-    "next": {
-      "zh": "Retrieval & RAG Internals 3/3：从 evidence bundle 进入 grounded generation、逐条引用支持、abstain、冲突与 prompt injection 边界，并完成 Agent 端到端发布验收。",
-      "en": "Retrieval & RAG Internals 3/3: take the evidence bundle into grounded generation, per-claim citation support, abstention, conflict and prompt-injection boundaries, then complete end-to-end agent release acceptance."
-    }
-  }
+  "pendingSeries": null
 }
