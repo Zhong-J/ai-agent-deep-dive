@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-24",
-  "latestIssueDate": "2026-10-24",
+  "generatedAt": "2026-10-25",
+  "latestIssueDate": "2026-10-25",
   "completedTopics": [
     "retrieval-grounded-generation-evaluation-safety",
     "inference-serving-scheduling-goodput-agent-acceptance",
@@ -28,6 +28,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-25",
+      "topicId": "multimodal-visual-grounding-computer-use-control",
+      "seriesId": "multimodal-agent-internals",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-10-24",
       "topicId": "multimodal-image-encoding-visual-token-budget",
@@ -311,24 +318,24 @@
   ],
   "pendingSeries": {
     "id": "multimodal-agent-internals",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "图像先经历缩放/裁剪/tiles，再由 patch 编码器形成有限视觉特征",
-        "LLaVA 式序列投影与 Flamingo 式 cross-attention 是不同视觉语言桥接方式",
-        "分辨率与视觉表示数共同决定小字可见性、prefill/缓存或视觉计算成本",
-        "流畅视觉描述不是可执行坐标的证明，Agent 留存原图/视口并独立授权复核"
+        "识别目标、定位、命中与完成任务是四层不同的状态和验收事件",
+        "模型提案须声明 observation ID/坐标帧，经 crop、缩放、DPI、scroll 映射并复核 UI",
+        "像素、OCR、DOM/accessibility 锚点可互补，但不自动证明用户意图或权限",
+        "外层控制器按风险授权，动作后新观测验证；超时先查状态，不能盲重试副作用"
       ],
       "en": [
-        "Images are resized, cropped, or tiled before a patch encoder creates finite visual features",
-        "LLaVA-style sequence projection and Flamingo-style cross-attention are different vision-language bridges",
-        "Resolution and visual representation count affect tiny-text visibility and prefill, cache, or vision compute cost",
-        "Fluent visual descriptions do not prove actionable coordinates; the agent retains original pixels and viewport and independently authorizes and verifies"
+        "Recognition, localization, hit, and terminal task success are four distinct states and acceptance events",
+        "A model proposal declares observation ID and coordinate frame, maps crop, scale, DPR, and scroll, and rechecks UI",
+        "Pixels, OCR, and DOM or accessibility anchors complement each other but do not establish user intent or authority",
+        "The outer controller authorizes by risk and verifies with a new observation; timeouts require state inspection, not blind retries"
       ]
     },
     "next": {
-      "zh": "Multimodal Agent Internals 2/3：解释 visual grounding 的点/框/DOM 锚点、坐标变换与 observation-action-verification 闭环，重点防止动态 UI 上的高风险误点。",
-      "en": "Multimodal Agent Internals 2/3: explain visual grounding through points, boxes, and DOM anchors, coordinate transforms, and the observation-action-verification loop, especially high-risk misclicks on dynamic UIs."
+      "zh": "Multimodal Agent Internals 3/3：建立静态感知、动态动作恢复、视觉注入/隐私、verified outcome 与成本的分层评估和发布门。",
+      "en": "Multimodal Agent Internals 3/3: build layered evaluation and release gates for static perception, dynamic action recovery, visual injection and privacy, verified outcomes, and cost."
     }
   }
 }
