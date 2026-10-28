@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-27",
-  "latestIssueDate": "2026-10-27",
+  "generatedAt": "2026-10-28",
+  "latestIssueDate": "2026-10-28",
   "completedTopics": [
     "multimodal-agent-evaluation-safety-verified-outcomes",
     "retrieval-grounded-generation-evaluation-safety",
@@ -30,6 +30,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-28",
+      "topicId": "audio-realtime-turn-taking-barge-in-tool-cancellation",
+      "seriesId": "audio-realtime-agent-internals",
+      "part": 2,
+      "complete": false
+    },
     {
       "date": "2026-10-27",
       "topicId": "audio-agent-representations-asr-codec-boundaries",
@@ -334,24 +341,24 @@
   ],
   "pendingSeries": {
     "id": "audio-realtime-agent-internals",
-    "nextPart": 2,
+    "nextPart": 3,
     "established": {
       "zh": [
-        "波形经采样/声学特征或 neural codec 离散化进入模型，声学帧不等于文字 token",
-        "ASR→文字 LLM→TTS 与联合语音文本是不同架构，转写损失与声学保留各有边界",
-        "partial transcript 可修正，说话人归属与工具授权分开验证",
-        "高风险动作等待完整意图、确认和外层权限，不由声纹或语气单独授权"
+        "VAD 检测声学活动，endpointing 才提交 turn，partial ASR 可随新音频回改",
+        "输出有已合成/服务端排队/客户端送达/确认播放水位；barge-in 清除服务端可取消片段、请求客户端尽力停播，并使旧 epoch 作废",
+        "已播语音和已提交工具副作用不可撤销，未知工具状态须先查权威结果",
+        "高风险动作仍需完整意图、参数绑定确认和外层授权，不能用声纹或语气单独放行"
       ],
       "en": [
-        "Waveforms become acoustic features or neural-codec symbols; acoustic frames are not text tokens",
-        "ASR→text LLM→TTS and joint speech-text are different architectures with transcription-loss and acoustic-retention boundaries",
-        "Partial transcripts can revise, while speaker attribution and tool authority need separate verification",
-        "High-risk actions wait for complete intent, confirmation, and outer permission rather than voice or tone alone"
+        "VAD detects acoustic activity, endpointing commits a turn, and partial ASR may revise with later audio",
+        "Output has synthesized, server-queued, client-delivered, and acknowledged-played watermarks; barge-in clears server-cancellable chunks, requests best-effort client stop, and invalidates the old epoch",
+        "Heard audio and committed tool effects cannot be retracted; unknown tool state needs authoritative reconciliation",
+        "High-risk actions require complete intent, parameter-bound confirmation, and outer authority, never voiceprint or tone alone"
       ]
     },
     "next": {
-      "zh": "Audio & Realtime Agent Internals 2/3：解释流式 chunk、VAD/endpointing、barge-in、TTS/工具取消与恢复，以及音频文字对齐。",
-      "en": "Audio & Realtime Agent Internals 2/3: explain streaming chunks, VAD and endpointing, barge-in, TTS and tool cancellation or recovery, and audio-text alignment."
+      "zh": "Audio & Realtime Agent Internals 3/3：在口音/噪声/重叠说话、误截断与假打断、录音隐私、语音注入/重放下建立 verified outcome、p99 与安全发布门。",
+      "en": "Audio & Realtime Agent Internals 3/3: build verified-outcome, p99, and safety release gates under accent, noise, overlap, false cutoffs and barge-ins, recording privacy, and speech injection or replay."
     }
   }
 }

@@ -1,0 +1,154 @@
+{
+  "date": "2026-10-28",
+  "slug": "realtime-voice-turn-taking-barge-in-cancellation",
+  "readingMinutes": 20,
+  "topicId": "audio-realtime-turn-taking-barge-in-tool-cancellation",
+  "series": {
+    "id": "audio-realtime-agent-internals",
+    "title": {
+      "zh": "Audio & Realtime Agent Internals",
+      "en": "Audio & Realtime Agent Internals"
+    },
+    "part": 2,
+    "total": 3,
+    "complete": false
+  },
+  "title": {
+    "zh": "语音 Agent 什么时候该开口，用户打断后什么必须停？",
+    "en": "When Should a Voice Agent Speak, and What Must Stop on Interruption?"
+  },
+  "dek": {
+    "zh": "把 VAD、endpointing、partial ASR、流式回复、barge-in 与工具取消拆成一台有提交边界的实时状态机。",
+    "en": "Treat VAD, endpointing, partial ASR, streamed replies, barge-in, and tool cancellation as a realtime state machine with explicit commit boundaries."
+  },
+  "tags": [
+    "Realtime speech",
+    "VAD",
+    "Endpointing",
+    "Streaming ASR",
+    "Barge-in",
+    "Cancellation"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>用户说‘帮我取消……不，先查一下订单’，语音 Agent 在停顿处判定 turn 结束，开始说‘正在取消’，甚至已调用工具。用户一打断，它停了播音，却没停后端动作。这个故障不是转写错一个字那么简单：系统把‘检测到短暂静音’误当作‘完整意图已提交’，又把‘停止声音’误当作‘取消整个 Agent 事务’。<strong>实时对话有多条并发时间线，每条都有不同的可撤销边界。</strong></p><p>昨天解释了波形、声学帧、transcript 和 codec token，以及 ASR→LLM→TTS 与更直接语音路线的差异。今天不再推采样率公式，而要回答：VAD 能判什么、endpointing 何时提交一句话、partial ASR 如何回改、何时可以先生成回复、barge-in 怎样截断已经排队的音频，以及一个工具请求在取消时究竟处于什么状态。第三篇再将这些机制与质量、安全和成本联成发布门。</p><div class='callout'><strong>核心判断：</strong>用户打断不是一个‘stop audio’按钮，而是对输入假设、模型生成、播放队列和外部动作分别发出的状态变更请求。</div>",
+        "en": "<p>A user says, 'Cancel my ... no, check the order first.' A voice agent interprets the pause as end of turn and begins saying 'I'm cancelling it'; perhaps it has already called a tool. The user interrupts. Playback stops, but the backend action continues. This is not merely one wrong transcription token. The system treated a short silence as committed intent and stopping sound as cancellation of an entire agent transaction. <strong>Realtime dialogue contains several concurrent timelines with different reversibility boundaries.</strong></p><p>Part 1 distinguished waveform, acoustic frames, transcript, and codec tokens, and the ASR→LLM→TTS cascade from more direct speech paths. Today we do not repeat sample-rate equations. We ask what VAD can determine, when endpointing commits an utterance, how partial ASR can revise text, when response generation may begin, how barge-in truncates queued audio, and what state a tool request is actually in when cancellation arrives. Part 3 will turn these mechanisms into quality, safety, and cost release gates.</p><div class='callout'><strong>Core judgment:</strong> interruption is not one 'stop audio' button. It requests distinct state transitions for input hypotheses, model generation, playback queues, and external actions.</div>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "承接音频表示与 Agent 持久状态",
+        "en": "Connecting audio representations to durable agent state"
+      },
+      "html": {
+        "zh": "<p>语音流按时间到达，声学帧不等于已确认文字。上一篇的 ASR 可交付 interim 和 final 假设；一些接口提供时间戳，有的只给片段文字。‘取消’可能随下文变为‘不要取消’。若低风险回复为了速度使用 partial，可把它当可丢弃草稿；对付款、删除或发送，外层授权仍需完整意图、确认和当前会话身份。声纹与语气不是权限凭证。</p><p>此前 Agent runtime 系列已讲过工具超时、幂等与恢复。实时语音把它们压进更短时标：麦克风仍在收音，TTS 已在播，工具可能还在跑。取消信号可以中止本地生成和服务端仍可取消的缓冲；已送达客户端或设备的片段只能请求尽力丢弃，不能保证尚未被听见，更不能撤回已播放的词，也不能自动逆转已生效的外部副作用。运行时应给每轮 turn 一个版本号，把音频片段、转写修订、生成 token、已播放字节和工具 action ID 关联起来；没有这本账，‘我已经停了’无法被验证。</p>",
+        "en": "<p>Speech arrives over time; an acoustic frame is not confirmed text. Part 1 showed that ASR may expose interim and final hypotheses. Some interfaces include timestamps; others expose only segment text. 'Cancel' may later become 'do not cancel.' A low-risk reply can use a partial hypothesis as discardable speculation to improve perceived speed. Payment, deletion, or messaging still require complete intent, confirmation, and current session authority at the outer boundary. Voiceprint and tone are not permission credentials.</p><p>The earlier agent-runtime series covered tool timeouts, idempotency, and recovery. Realtime speech compresses those concerns into a shorter timescale: the microphone still records, TTS is playing, and a tool may be in flight. A cancellation signal can stop local generation and server-side cancellable buffers. Audio already delivered to client or device buffers can only be dropped on a best-effort basis; a delayed playback acknowledgment cannot prove it was unheard, and heard words cannot be retracted, nor automatically reverse an external side effect. Assign each conversational turn a version and link its audio segments, transcript revisions, generated tokens, played bytes, and tool action IDs. Without that ledger, 'I stopped' is not a verifiable claim.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "机制：输入、输出与工具的三条并发时间线",
+        "en": "Mechanism: concurrent input, output, and tool timelines"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 278' role='img' aria-labelledby='turn-zh-title turn-zh-desc'><title id='turn-zh-title'>用户打断时语音 Agent 的三条时间线</title><desc id='turn-zh-desc'>输入线上麦克风 chunk 经 VAD、partial ASR 到 turn commit；输出线上模型生成、TTS 缓冲和已播音频依次推进；工具线上提案经授权、发起后可能已产生副作用。barge-in 使新 turn 版本递增，清除服务端可取消缓冲、请求客户端尽力丢弃已送达而未确认播放的片段，并检查工具真实状态；已播词与已执行副作用不可撤销。</desc><g fill='#20312a' font-family='sans-serif' font-size='16'><text x='14' y='63'>输入</text><text x='14' y='128'>输出</text><text x='14' y='193'>工具</text></g><rect x='90' y='31' width='137' height='49' rx='7' fill='#8e6935'/><rect x='258' y='31' width='140' height='49' rx='7' fill='#8e6935'/><rect x='429' y='31' width='140' height='49' rx='7' fill='#20312a'/><rect x='90' y='96' width='137' height='49' rx='7' fill='#20312a'/><rect x='258' y='96' width='140' height='49' rx='7' fill='#9f4939'/><rect x='429' y='96' width='140' height='49' rx='7' fill='#9f4939'/><rect x='90' y='161' width='137' height='49' rx='7' fill='#20312a'/><rect x='258' y='161' width='140' height='49' rx='7' fill='#9f4939'/><rect x='429' y='161' width='140' height='49' rx='7' fill='#9f4939'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='104' y='62'>音频 chunk / VAD</text><text x='272' y='62'>partial ASR</text><text x='443' y='62'>turn commit</text><text x='104' y='127'>模型草稿</text><text x='272' y='127'>TTS 已排队</text><text x='443' y='127'>已经播出</text><text x='104' y='192'>工具提案</text><text x='272' y='192'>已发起请求</text><text x='443' y='192'>结果未知/已生效</text></g><path d='M227 55h31 M398 55h31 M227 120h31 M398 120h31 M227 185h31 M398 185h31' stroke='#839087' stroke-width='3'/><rect x='590' y='31' width='157' height='179' rx='8' fill='#e7dfd0'/><text x='604' y='76' fill='#35433b' font-size='16' font-family='sans-serif'>barge-in:</text><text x='604' y='105' fill='#35433b' font-size='15' font-family='sans-serif'>清服务端队列</text><text x='604' y='136' fill='#35433b' font-size='15' font-family='sans-serif'>查工具状态</text><text x='604' y='167' fill='#35433b' font-size='15' font-family='sans-serif'>不可倒播/倒执行</text><text x='57' y='255' fill='#35433b' font-size='15' font-family='sans-serif'>真正的取消是状态协调，不是仅关闭扬声器</text></svg><figcaption>原创示意：三条时间线可并发，颜色表示可撤销程度而非固定协议状态；已送达客户端但尚未确认播放的边界未单列，需尽力停止并核对回执。手机可横向滑动。</figcaption></figure><h3>1. VAD 检测活动，不判完整意图</h3><p>Voice Activity Detection 通常对短音频帧判语音/非语音，可帮助去掉长静音和触发候选 turn；它不会理解‘我还没说完’。WebRTC VAD 源码是一种可核查实现，不是所有服务的规范。背景电视、键盘声、回声、轻声和两个人重叠会改变误报/漏报。Endpointing 在 VAD 之上决定何时把一句话视为可提交：静音持续多久、句法/语义是否似已完成、是否有显式 push-to-talk 结束信号。短阈值快却易截断，长阈值稳却使响应迟钝。</p><h3>2. 流式 ASR 的 partial 可回改</h3><p>流式识别器用有限未来上下文持续产生假设，后来的音频可能改变前面的字词。RNN-T 的原论文给出 sequence transduction 目标，Emformer 作者研究低延迟 streaming acoustic model；论文报告的准确率和延迟只对应其设置。运行时应区分 tentative、stable prefix 和 final：只有在系统定义的稳定条件和授权门都满足后，才把行动意图提交。模型可以提前搜索只读信息，但‘把已经说出的半句话当成不可变命令’会放大误听。</p><h3>3. 回复可以提前算，不能提前承诺副作用</h3><p>为降低等待，文本/音频生成与 TTS 可以边产生边发送 chunk。把每个输出 chunk 关联 turn 版本与源 transcript 修订。若用户在 Agent 说话时继续讲，新的语音可能是自然的 backchannel（‘嗯’），也可能是真正的打断（‘等等，不要’）；单凭一个 VAD 脉冲不可安全决定。可暂停或降低音量、积累更多证据，再判断是否切换 turn。Moshi 作者研究实时语音文本对话与重叠交互；它的系统设计不是所有产品的默认协议。</p><h3>4. Barge-in 要分层取消</h3><p>确认打断后，立即清除服务端仍可取消的 TTS 队列，并向客户端发停止/清缓冲请求；网络、浏览器或设备缓冲里已送达但尚未确认播放的片段只能尽力停止，播放回执还可能滞后。给旧 turn 标记取消 epoch，拒收其晚到的模型 token 与 ASR/TTS chunk；不能把此举误报成用户绝对没有听到旧音频。已播语音无法撤回，应在下一句纠正；已发起工具须查询其真实状态。可取消的只读请求可中止；有副作用的请求可能已经生效，要按幂等键/事务状态核对，不得因麦克风检测到新声就自动重放或反向操作。外层 broker 仍执行权限与确认合同。</p><h3>5. 处理回声和多说话人</h3><p>扬声器播出的 Agent 声音会被麦克风再次拾取。声学 echo cancellation、播放参考信号、说话人线索和时序可减少自触发，但不能保证完全分离。若系统误把自己‘请确认取消’当成用户说的‘确认’，可能形成自我授权回路。任何高风险确认都应绑定已认证用户和具体参数，不能只靠语音相似。重叠说话需要明确是否暂停、追问或交人工，而非混成一条‘完整’转写。</p><h3>6. 记录可恢复的对话状态</h3><p>每个 turn 保留 input chunk 序号/时间、partial→final 修订、endpoint 原因、输出已合成/服务端排队/客户端送达/确认播放水位、工具 action ID 和最后可核验状态。断线重连时不能把旧 TTS 再播一遍，也不能重做已经提交的付款。把已确认但未播出的回复与已执行工具分开持久化；恢复先核对状态，再决定播报‘刚才操作已完成’或‘结果不确定，需要人工确认’。</p>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 278' role='img' aria-labelledby='turn-en-title turn-en-desc'><title id='turn-en-title'>Three voice-agent timelines at user interruption</title><desc id='turn-en-desc'>On the input line, microphone chunks move through VAD and partial ASR to turn commitment. On the output line, model generation, TTS buffering, and played audio advance. On the tool line, a proposal is authorized and a request may already have side effects. Barge-in increments the turn version, clears cancellable server buffers, asks the client to drop delivered-but-unacknowledged audio on a best-effort basis, and checks tool state; heard words and executed side effects cannot be undone.</desc><g fill='#20312a' font-family='sans-serif' font-size='16'><text x='14' y='63'>Input</text><text x='14' y='128'>Output</text><text x='14' y='193'>Tools</text></g><rect x='90' y='31' width='137' height='49' rx='7' fill='#8e6935'/><rect x='258' y='31' width='140' height='49' rx='7' fill='#8e6935'/><rect x='429' y='31' width='140' height='49' rx='7' fill='#20312a'/><rect x='90' y='96' width='137' height='49' rx='7' fill='#20312a'/><rect x='258' y='96' width='140' height='49' rx='7' fill='#9f4939'/><rect x='429' y='96' width='140' height='49' rx='7' fill='#9f4939'/><rect x='90' y='161' width='137' height='49' rx='7' fill='#20312a'/><rect x='258' y='161' width='140' height='49' rx='7' fill='#9f4939'/><rect x='429' y='161' width='140' height='49' rx='7' fill='#9f4939'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='104' y='62'>Mic / VAD</text><text x='272' y='62'>Partial ASR</text><text x='443' y='62'>Turn commit</text><text x='104' y='127'>Model draft</text><text x='272' y='127'>TTS queued</text><text x='443' y='127'>Already heard</text><text x='104' y='192'>Tool proposal</text><text x='272' y='192'>Request sent</text><text x='443' y='192'>Unknown / applied</text></g><path d='M227 55h31 M398 55h31 M227 120h31 M398 120h31 M227 185h31 M398 185h31' stroke='#839087' stroke-width='3'/><rect x='590' y='31' width='157' height='179' rx='8' fill='#e7dfd0'/><text x='604' y='76' fill='#35433b' font-size='16' font-family='sans-serif'>Barge-in:</text><text x='604' y='105' fill='#35433b' font-size='15' font-family='sans-serif'>Clear server queue</text><text x='604' y='136' fill='#35433b' font-size='15' font-family='sans-serif'>Check tool state</text><text x='604' y='167' fill='#35433b' font-size='15' font-family='sans-serif'>Cannot unplay / undo</text><text x='57' y='255' fill='#35433b' font-size='15' font-family='sans-serif'>Cancellation coordinates state; it is not speaker mute alone</text></svg><figcaption>Original explanatory diagram: timelines can overlap. Colors show degree of reversibility, not a mandated protocol state. Delivered but unacknowledged client audio is compressed in this sketch and requires best-effort stopping and acknowledgment checks. Swipe horizontally on a phone.</figcaption></figure><h3>1. VAD detects activity, not finished intent</h3><p>Voice activity detection usually classifies short audio frames as speech or non-speech. It can discard long silence and suggest a turn boundary, but does not understand 'I'm not finished.' WebRTC VAD source is one inspectable implementation, not a universal service specification. Background television, keyboard noise, echo, quiet speech, and overlap alter false alarms and misses. Endpointing adds the decision to commit an utterance: how long has silence lasted, does syntax or meaning appear complete, or did push-to-talk explicitly end? A short threshold feels fast but cuts off speech; a long one waits and adds latency.</p><h3>2. Streaming ASR partials can revise</h3><p>A streaming recognizer emits hypotheses with limited future context. Later audio may change earlier words. The original RNN-T paper develops a sequence-transduction objective; the Emformer authors study a low-latency streaming acoustic model. Their reported accuracy and latency belong to their settings. The runtime should distinguish tentative text, a stable prefix, and final text. Only after defined stability and authorization conditions may an action intent be committed. A model can prepare read-only retrieval early, but treating a half utterance as an immutable command amplifies misrecognition.</p><h3>3. Start response work early without committing side effects</h3><p>To reduce waiting, text or audio generation and TTS can emit chunks as they are produced. Associate every output chunk with its turn version and transcript revision. A new vocalization while the agent speaks might be a backchannel ('mm-hm') or a true interruption ('wait, don't'). One VAD pulse is insufficient to decide safely. Pause or duck output, collect more evidence, then decide whether to switch turns. Moshi studies real-time speech-text dialogue and overlapping interaction; its design is not every product's default protocol.</p><h3>4. Barge-in cancels by layer</h3><p>On confirmed interruption, immediately clear TTS chunks still cancellable on the server and request client playback stop and buffer clearing. Chunks already delivered into network, browser, or device buffers can be dropped only on a best-effort basis, and playback acknowledgments may lag. Advance a cancellation epoch to reject late model tokens and ASR/TTS chunks from the old turn; do not report this as proof that the user heard none of the old audio. Already heard audio cannot be retracted; a later utterance must correct it. An in-flight tool needs a real status check. A cancellable read-only request may stop. A side-effectful request may already have applied and must be reconciled with idempotency keys or transaction state, not replayed or reversed merely because new microphone audio appeared. The outer broker still enforces authority and confirmation.</p><h3>5. Handle echo and multiple speakers</h3><p>The agent's own audio can be captured by the microphone. Acoustic echo cancellation, a playback reference, speaker cues, and timing can reduce self-triggering but cannot guarantee separation. If the system mistakes its own 'Please confirm cancellation' for a user's 'Confirm,' it can create a self-authorization loop. High-risk confirmation must bind to an authenticated user and exact parameters, not voice similarity alone. When speech overlaps, explicitly pause, clarify, or hand off rather than merging speakers into one supposedly complete transcript.</p><h3>6. Persist recoverable dialogue state</h3><p>Each turn records input-chunk sequence and time, partial-to-final revisions, endpoint reason, synthesized/server-queued/client-delivered/acknowledged-played output watermarks, tool action ID, and last verifiable state. On reconnect, do not replay old TTS or repeat a committed payment. Persist confirmed-but-unplayed response separately from executed tools. Recovery first reconciles state, then decides whether to say 'the prior action completed' or 'the result is uncertain and needs human confirmation.'</p>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "必要数学：延迟与截断的共同预算",
+        "en": "Essential mathematics: latency and premature cutoff"
+      },
+      "html": {
+        "zh": "<p>以用户最后一个有效语音帧为零点，一个级联式回复的首个可听音频延迟可近似拆成 <strong>T_first≈T_endpoint+T_ASR_stable+T_model_first+T_TTS_first+T_playout−T_overlap</strong>。各 T 分别是判定输入结束、ASR 稳定文本、模型首输出、TTS 首块、网络/播放缓冲耗时；T_overlap 是相互重叠而不能重复相加的时间。若 ASR 在用户说话时就开始，endpoint 与 ASR 可高度重叠；这个公式只是账本，实际需用 trace 的关键路径测量。缩短 endpoint 阈值可能降低 T_first，却提高截断和错判成本。</p><p>最简单的 endpoint 规则是 <strong>连续非语音时长 s≥θ</strong> 才提交。s 是当前静音长度，θ 是阈值。θ 太小会把思考停顿当结束；θ 太大则拖慢响应。真实系统还可结合语义完成度、说话人变化和显式按钮，但这些信号各有误差。评估时画横轴 θ、纵轴‘误截断率与从最后音节到首声的延迟’，不能只报一个平均响应速度。</p><p>对按序编号的输出定义四个水位 <strong>g≥q≥d≥p</strong>：g 是已合成的最后一个音频 chunk，q 是已进入服务端发送队列的最后一个，d 是已送达客户端或设备缓冲的最后一个，p 是客户端回执确认已播放的最后一个。同一 turn 中 g−q 尚未排队，q−d 仍可在服务端确定地清除；d−p 已离开服务端，只能请求客户端尽力丢弃，且回执可能滞后，因此不能把它断言为‘确定未播’。barge-in 停止新合成、清除可控队列并请求客户端停播；p 及之前的声音不可撤回。工具另有独立的 prepared、sent、unknown、committed 状态，不能拿音频水位判断业务是否撤销。水位是本文给工程追踪用的抽象，不是某论文统一协议。</p>",
+        "en": "<p>From the user's last meaningful speech frame, a cascade's time to first audible response can be sketched as <strong>T_first≈T_endpoint+T_ASR_stable+T_model_first+T_TTS_first+T_playout−T_overlap</strong>. Terms represent end-of-turn decision, stable ASR text, first model output, first TTS chunk, and network or playback buffering. T_overlap subtracts work that happened concurrently rather than charging it twice. ASR may begin while the user is still speaking and overlap heavily with endpointing. This is an accounting sketch, not an exact critical-path equation; measure the real trace. Shortening endpoint delay can reduce T_first while increasing premature-cutoff cost.</p><p>A minimal endpoint rule commits when <strong>continuous nonspeech duration s≥θ</strong>. s is the current silence span; θ is a threshold. Too small a θ ends on a thinking pause. Too large a θ makes the agent sluggish. Systems can add semantic completion, speaker changes, or an explicit push-to-talk release, but each signal also errs. Plot cutoff error and latency from the final syllable to first sound against θ. One mean response-speed number hides the trade-off.</p><p>For sequentially numbered output, define four watermarks <strong>g≥q≥d≥p</strong>: g is the last synthesized audio chunk, q the last chunk in the server send queue, d the last delivered to a client or device buffer, and p the last acknowledged by the client as played. The g−q work has not entered that queue, while q−d can be cleared deterministically on the server. The d−p interval has left server control: ask the client to drop it on a best-effort basis, but acknowledgments can lag, so it is not proof of unheard audio. On barge-in, stop new synthesis, clear controllable queues, and request client playback stop; sound through p cannot be taken back. A tool has separate prepared, sent, unknown, and committed states. Audio watermarks do not say whether a business action was reversed. These watermarks are an editorial tracing abstraction, not a standard protocol dictated by a paper.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 的影响：提交边界与可恢复语音",
+        "en": "Agent implications: commit boundaries and recoverability"
+      },
+      "html": {
+        "zh": "<p>一次语音交互至少要为四个对象分配独立 ID：输入音频段、转写修订、输出语音 chunk、外部工具 action。日志记录每个 ID 的时间、turn epoch、状态和可见范围；敏感原声可按同意与最小化策略只留受控引用。若用户打断，旧 epoch 在服务端可控的输出作废，同时请求客户端尽力停播已送达片段；新的输入开启下一轮；但旧 action 的真实结果先从权威系统查明。用户听见‘正在取消’并不意味着订单已取消，反过来停止 TTS 也不意味着取消已撤回，回复应准确说明当前状态。</p><p>把动作按风险分类。只读查询可在 partial ASR 时预取并在 turn 修订后丢弃；可逆配置变更仍需完整意图和可核查补偿；付款、删除、发送等高损失动作必须由完整、绑定参数的确认与工具 broker 授权，超时未知时停住。语音交互为了自然可能更早开口，但‘我正在处理’应与‘操作已完成’分开，不把预测性语言当业务事实。</p><p>验收要切到长停顿、否定自我修正、回声、自声触发、多人重叠、噪声、网络抖动、工具超时和用户 barge-in。分别测误截断、真实打断检出、服务端缓冲清除、客户端停播回执与残余播音、已播信息纠正、重复副作用、工具终态和 p95/p99 首声延迟。一个系统自然流畅却在打断时继续付款，不是‘小体验问题’。</p>",
+        "en": "<p>Give at least four objects independent IDs in a voice interaction: input audio segment, transcript revision, output speech chunk, and external tool action. Log each ID's time, turn epoch, state, and visibility. Sensitive raw audio may be retained only through a controlled reference under consent and minimization policy. On interruption, invalidate server-controllable output from the old epoch, request best-effort stopping of delivered client audio, and begin a new input turn. Reconcile the old action against an authoritative system first. Hearing 'I'm cancelling' does not mean an order was cancelled; stopping TTS does not mean a cancellation was undone. The agent's next reply must state the actual status.</p><p>Classify actions by risk. Read-only queries can be prefetched from partial ASR and discarded after a transcript revision. Even reversible configuration changes need complete intent and a verifiable compensation path. Payment, deletion, and messaging require complete parameter-bound confirmation and tool-broker authorization; unknown outcomes on timeout should stop. A natural voice experience may begin speaking early, but 'I am working on it' must be distinct from 'it is complete.' Predictive speech is not a business fact.</p><p>Acceptance slices include long pauses, self-corrected negations, echo, self-triggering, overlapping speakers, noise, network jitter, tool timeouts, and user barge-in. Measure premature cutoffs, genuine-interruption detection, server-buffer clearing, client stop acknowledgments and residual playback, corrections to already heard information, duplicate side effects, tool terminal state, and p95/p99 time to first sound. A conversationally fluent system that keeps paying after interruption has more than a minor UX defect.</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<ul><li><strong>VAD=用户说完：</strong>VAD 只判声学活动；短停顿可能是思考，语义与显式 turn 信号需另看。</li><li><strong>partial ASR 已稳定：</strong>后续词可改变否定与参数；高风险动作等 final 和确认。</li><li><strong>只关 TTS 就算取消：</strong>旧模型、缓冲和工具可能继续；逐层打 epoch、查状态。</li><li><strong>用户一说‘嗯’就打断：</strong>backchannel 不一定是新指令；要结合上下文和误触成本。</li><li><strong>点击停止就能撤回已播内容：</strong>用户已听到的信息只能后续纠正，不能静音回滚。</li><li><strong>工具超时自动重发：</strong>副作用可能已提交；先核对权威状态和幂等键。</li><li><strong>声音像用户就获授权：</strong>回声、录音、旁人和模仿都可能出现；独立身份门。</li></ul><p>更低延迟、较少误截断和更少假打断无法只靠一个阈值同时最优。按任务风险与用户体验设策略，同时报告尾延迟和不可逆错误，而不是宣称某个 θ 通用。</p>",
+        "en": "<ul><li><strong>VAD means the user finished:</strong> it detects acoustic activity, not intention. A pause can be thinking; semantics and explicit turn signals are separate.</li><li><strong>Partial ASR is stable:</strong> later words can change negation or parameters. High-risk actions wait for final intent and confirmation.</li><li><strong>Muting TTS cancels everything:</strong> old generation, buffers, and tools may continue. Invalidate epochs and inspect states by layer.</li><li><strong>Any 'mm-hm' is interruption:</strong> a backchannel may not be a new command. Account for context and false-trigger cost.</li><li><strong>Stopping playback retracts heard words:</strong> already heard claims need correction, not a silent rollback.</li><li><strong>Automatically resend a timed-out tool:</strong> the side effect may have committed. Check authoritative state and idempotency keys.</li><li><strong>A familiar voice grants permission:</strong> echo, recording, bystanders, and imitation exist. Identity is an independent gate.</li></ul><p>Low latency, few premature cutoffs, and few false barge-ins cannot all be optimized by one threshold. Choose policy by task risk and experience, then report tails and irreversible errors rather than announcing a universal θ.</p>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可复用的技术判断",
+        "en": "Reusable technical judgments"
+      },
+      "html": {
+        "zh": "<ul><li>VAD 判语音活动，endpointing 判 turn 提交；两者都不自动证明完整意图。</li><li>partial ASR 可回改，低风险可投机准备，高风险副作用等终稿和授权。</li><li>barge-in 分别停止生成、清除服务端可取消 TTS、请求客户端尽力停播并核对工具状态；已播声音与已提交副作用不能回滚。</li><li>给每轮输入、转写、输出和工具关联 epoch 与水位，恢复时先查真实状态。</li><li>以误截断、真/假打断、首声 p99、重复副作用和 verified outcome 共同验收。</li></ul>",
+        "en": "<ul><li>VAD detects speech activity; endpointing commits a turn. Neither alone proves complete intent.</li><li>Partial ASR can revise. Speculate only on low-risk preparation; high-risk effects wait for final intent and authority.</li><li>Barge-in separately stops generation, clears server-cancellable TTS, requests best-effort client playback stop, and reconciles tools. Heard audio and committed side effects cannot roll back.</li><li>Link input, transcript, output, and tools to a turn epoch and watermarks; reconcile real state before recovery.</li><li>Accept on cutoff errors, true and false interruption, first-audio p99, duplicate effects, and verified outcomes together.</li></ul>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "一手资料与证据等级",
+        "en": "Primary sources and evidence tiers"
+      },
+      "html": {
+        "zh": "<ul class='source-list'><li><a href='https://webrtc.googlesource.com/src/+/refs/heads/main/common_audio/vad/'>WebRTC VAD source</a> — 可核查的声学活动检测实现；不是语义端点策略规范。</li><li><a href='https://arxiv.org/abs/1211.3711'>Sequence Transduction with Recurrent Neural Networks (RNN-T)</a> — 作者提出可用于流式转写的序列转导目标。</li><li><a href='https://arxiv.org/abs/2010.10759'>Emformer</a> — 作者研究低延迟 streaming acoustic model；延迟数字属其设置。</li><li><a href='https://arxiv.org/abs/2410.00037'>Moshi</a> — 作者报告实时语音文本交互模型；不能当成所有系统的 barge-in 协议。</li><li><a href='https://arxiv.org/abs/2212.04356'>Whisper</a> — 上一篇的 ASR 基础来源；此处用于说明转写是模型输出，未声称它提供统一的实时 endpoint API。</li></ul><p>turn epoch、播放水位、分层取消与高风险工具恢复是本文编辑性工程设计；不声称这些论文定义了相同状态机或验证了某具体产品的安全行为。</p>",
+        "en": "<ul class='source-list'><li><a href='https://webrtc.googlesource.com/src/+/refs/heads/main/common_audio/vad/'>WebRTC VAD source</a> — an inspectable acoustic-activity detector, not a semantic endpointing specification.</li><li><a href='https://arxiv.org/abs/1211.3711'>Sequence Transduction with Recurrent Neural Networks (RNN-T)</a> — the authors introduce a sequence-transduction objective usable for streaming transcription.</li><li><a href='https://arxiv.org/abs/2010.10759'>Emformer</a> — the authors study a low-latency streaming acoustic model; latency measurements are from their setting.</li><li><a href='https://arxiv.org/abs/2410.00037'>Moshi</a> — the authors report a real-time speech-text interaction model, not a universal barge-in protocol.</li><li><a href='https://arxiv.org/abs/2212.04356'>Whisper</a> — the previous part's ASR foundation, cited here to show transcription is model output, not to assert one standard realtime endpoint API.</li></ul><p>Turn epochs, playback watermarks, layer-specific cancellation, and high-risk tool recovery are editorial systems designs. These papers do not prescribe one shared state machine or validate any particular product's safety behavior.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "已建立与下一篇起点",
+        "en": "Established and next starting point"
+      },
+      "html": {
+        "zh": "<p><strong>今天已建立：</strong>上一篇的波形、声学帧/转写与 codec token 是不同表示；今天把实时输入拆成 VAD 活动、endpoint turn 提交和可回改 partial ASR，把输出拆成已合成、服务端排队、客户端送达与确认播放四个水位，并把工具副作用留在独立状态机。barge-in 使旧 turn epoch 作废，但已播语音与已提交工具不能撤销，恢复先查真实状态。高风险动作始终等完整意图与外层授权。</p><p><strong>尚未讲完：</strong>怎样在口音、噪声、重叠说话、误截断、假打断、延迟和外部副作用同时存在时评估语音 Agent？如何处理录音隐私、语音注入/重放与用户身份，以及不同风险级的发布门？</p><p><strong>下一篇起点：</strong>Audio & Realtime Agent Internals 3/3 综合分层评估、隐私/安全、verified outcome、p99 与成本；不再重复本篇 VAD 阈值或取消状态机。</p>",
+        "en": "<p><strong>Established today:</strong> Part 1 separated waveforms, acoustic frames or transcripts, and codec tokens. Today realtime input separates VAD activity, endpoint turn commitment, and revisable partial ASR. Output has synthesized, server-queued, client-delivered, and acknowledged-played watermarks; external tool effects remain in another state machine. Barge-in invalidates the old turn epoch, but heard audio and committed tools cannot be retracted. Recovery checks real state first. High-risk actions still require complete intent and outer authorization.</p><p><strong>Still unresolved:</strong> how should a voice agent be evaluated under accent, noise, overlap, false cutoffs, false barge-ins, latency, and external side effects at once? How should recording privacy, speech injection or replay, user identity, and risk-tiered release gates be handled?</p><p><strong>Next starting point:</strong> Audio & Realtime Agent Internals Part 3/3 combines layered evaluation, privacy and safety, verified outcomes, p99, and cost without repeating today's VAD threshold or cancellation state machine.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "continues",
+    "established": {
+      "zh": [
+        "VAD 检测声学活动，endpointing 才提交 turn，partial ASR 可随新音频回改",
+        "输出有已合成/服务端排队/客户端送达/确认播放水位；barge-in 清除服务端可取消片段、请求客户端尽力停播，并使旧 epoch 作废",
+        "已播语音和已提交工具副作用不可撤销，未知工具状态须先查权威结果",
+        "高风险动作仍需完整意图、参数绑定确认和外层授权，不能用声纹或语气单独放行"
+      ],
+      "en": [
+        "VAD detects acoustic activity, endpointing commits a turn, and partial ASR may revise with later audio",
+        "Output has synthesized, server-queued, client-delivered, and acknowledged-played watermarks; barge-in clears server-cancellable chunks, requests best-effort client stop, and invalidates the old epoch",
+        "Heard audio and committed tool effects cannot be retracted; unknown tool state needs authoritative reconciliation",
+        "High-risk actions require complete intent, parameter-bound confirmation, and outer authority, never voiceprint or tone alone"
+      ]
+    },
+    "next": {
+      "zh": "Audio & Realtime Agent Internals 3/3：在口音/噪声/重叠说话、误截断与假打断、录音隐私、语音注入/重放下建立 verified outcome、p99 与安全发布门。",
+      "en": "Audio & Realtime Agent Internals 3/3: build verified-outcome, p99, and safety release gates under accent, noise, overlap, false cutoffs and barge-ins, recording privacy, and speech injection or replay."
+    }
+  }
+}
