@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-10-28",
-  "latestIssueDate": "2026-10-28",
+  "generatedAt": "2026-10-29",
+  "latestIssueDate": "2026-10-29",
   "completedTopics": [
+    "audio-realtime-evaluation-privacy-security-release-gates",
     "multimodal-agent-evaluation-safety-verified-outcomes",
     "retrieval-grounded-generation-evaluation-safety",
     "inference-serving-scheduling-goodput-agent-acceptance",
@@ -16,6 +17,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "audio-realtime-agent-internals",
     "multimodal-agent-internals",
     "retrieval-rag-internals",
     "inference-optimization-internals",
@@ -30,6 +32,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-29",
+      "topicId": "audio-realtime-evaluation-privacy-security-release-gates",
+      "seriesId": "audio-realtime-agent-internals",
+      "part": 3,
+      "complete": true
+    },
     {
       "date": "2026-10-28",
       "topicId": "audio-realtime-turn-taking-barge-in-tool-cancellation",
@@ -339,26 +348,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "audio-realtime-agent-internals",
-    "nextPart": 3,
-    "established": {
-      "zh": [
-        "VAD 检测声学活动，endpointing 才提交 turn，partial ASR 可随新音频回改",
-        "输出有已合成/服务端排队/客户端送达/确认播放水位；barge-in 清除服务端可取消片段、请求客户端尽力停播，并使旧 epoch 作废",
-        "已播语音和已提交工具副作用不可撤销，未知工具状态须先查权威结果",
-        "高风险动作仍需完整意图、参数绑定确认和外层授权，不能用声纹或语气单独放行"
-      ],
-      "en": [
-        "VAD detects acoustic activity, endpointing commits a turn, and partial ASR may revise with later audio",
-        "Output has synthesized, server-queued, client-delivered, and acknowledged-played watermarks; barge-in clears server-cancellable chunks, requests best-effort client stop, and invalidates the old epoch",
-        "Heard audio and committed tool effects cannot be retracted; unknown tool state needs authoritative reconciliation",
-        "High-risk actions require complete intent, parameter-bound confirmation, and outer authority, never voiceprint or tone alone"
-      ]
-    },
-    "next": {
-      "zh": "Audio & Realtime Agent Internals 3/3：在口音/噪声/重叠说话、误截断与假打断、录音隐私、语音注入/重放下建立 verified outcome、p99 与安全发布门。",
-      "en": "Audio & Realtime Agent Internals 3/3: build verified-outcome, p99, and safety release gates under accent, noise, overlap, false cutoffs and barge-ins, recording privacy, and speech injection or replay."
-    }
-  }
+  "pendingSeries": null
 }
