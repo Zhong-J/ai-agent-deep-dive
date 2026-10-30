@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-29",
-  "latestIssueDate": "2026-10-29",
+  "generatedAt": "2026-10-30",
+  "latestIssueDate": "2026-10-30",
   "completedTopics": [
     "audio-realtime-evaluation-privacy-security-release-gates",
     "multimodal-agent-evaluation-safety-verified-outcomes",
@@ -32,6 +32,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-10-30",
+      "topicId": "realtime-multimodal-event-time-availability-alignment",
+      "seriesId": "realtime-multimodal-coordination",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-10-29",
       "topicId": "audio-realtime-evaluation-privacy-security-release-gates",
@@ -348,5 +355,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "realtime-multimodal-coordination",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "音视频各有采集、到达和可用时刻，工具另有执行时刻；到达顺序不能替代 event time",
+        "不同媒体时钟先映到共同单调轴并保留漂移/不确定度，原始 RTP 时间戳不可跨流直接比较",
+        "在线决策只用截止前可用的候选证据，迟到帧不能倒灌已提交工具",
+        "历史帧用于解释指代，当前 UI/权限复核才决定动作能否执行"
+      ],
+      "en": [
+        "Audio and video have capture, arrival, and availability times, while tools have execution time; arrival order cannot replace event time",
+        "Map media clocks onto a common monotonic axis with drift and uncertainty; raw RTP timestamps cannot be directly compared across streams",
+        "Online decisions use only candidate evidence available before the deadline; late frames cannot retroactively justify committed tools",
+        "Historical frames explain references, while current UI and authority checks determine whether an action may execute"
+      ]
+    },
+    "next": {
+      "zh": "Realtime Multimodal Coordination 2/2：从时间合格的候选出发，处理说话人/物体指代冲突、来源可信度、澄清与工具提交、会话级融合评测。",
+      "en": "Realtime Multimodal Coordination 2/2: start from temporally eligible candidates and handle speaker and object-reference conflict, provenance, clarification and tool commitment, and conversation-level fusion evaluation."
+    }
+  }
 }
