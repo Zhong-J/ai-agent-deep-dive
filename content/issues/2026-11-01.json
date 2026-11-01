@@ -1,0 +1,154 @@
+{
+  "date": "2026-11-01",
+  "slug": "agent-world-state-belief-update-partial-observability",
+  "readingMinutes": 20,
+  "topicId": "world-state-belief-update-observation-action",
+  "series": {
+    "id": "agent-world-state-belief-tracking",
+    "title": {
+      "zh": "Agent World State & Partial Observability",
+      "en": "Agent World State & Partial Observability"
+    },
+    "part": 1,
+    "total": 2,
+    "complete": false
+  },
+  "title": {
+    "zh": "Agent 刚看到的世界，下一步还是真的吗？",
+    "en": "Is the World the Agent Just Saw Still True One Step Later?"
+  },
+  "dek": {
+    "zh": "把观察、动作后的状态预测与新证据更新分开：Agent 需要可追溯的 belief，而不是把旧截图或工具超时写成事实。",
+    "en": "Separate observation, post-action prediction, and evidence updates: an agent needs a traceable belief, not a stale screenshot or timeout promoted into fact."
+  },
+  "tags": [
+    "Partial observability",
+    "Belief state",
+    "State estimation",
+    "Tool uncertainty",
+    "Preconditions",
+    "World models"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>10:00:00，Agent 从日程 API 读到会议室 R 空闲；10:00:05 发出预订请求，连接超时；界面仍显示旧的‘空闲’，另一个用户同时也可能预订。此时 Agent 若说‘我已经订好’，是把请求发出当成提交成功；若立即重试，则可能重复占用；若仍把 10:00:00 的空闲当当前事实，也可能预订冲突。<strong>运行中的世界不是一份持续有效的快照；Agent 只能维护带时间、来源和不确定性的状态估计。</strong></p><p>上篇完成跨模态时间对齐与证据冲突，结尾留下一个更深的问题：已对齐的观察何时能成为下一步行动的前提？先前的 Context & Memory 系列已讲 event log、durable record、valid time、冲突与检索，本篇不重做记忆库。今天开始 Agent World State & Partial Observability 1/2，打开运行时的状态估计：动作如何改变可能世界、观察如何修正这些可能、超时为何必须保留 unknown。下一篇再讨论主动查询、行动选择与何时值得付出额外观测成本。</p><div class='callout'><strong>核心判断：</strong>历史 observation 可以证明‘当时看到了什么’，不自动证明‘现在是什么’；模型预测可用于选择下一次观察，不能充当已核验工具结果。</div>",
+        "en": "<p>At 10:00:00 an agent reads a calendar API and sees room R available. At 10:00:05 it sends a booking request, but the connection times out. The UI still shows the old 'available' label, and another user may have booked the room meanwhile. Saying 'I booked it' treats request transmission as committed success. Immediately retrying can duplicate an effect. Treating the 10:00:00 availability as a current fact can cause a conflict. <strong>The live world is not a permanently valid snapshot; an agent can maintain only a time-, source-, and uncertainty-qualified estimate of state.</strong></p><p>The previous series completed multimodal time alignment and evidence conflict, then asked when an aligned observation can support the next action. The earlier Context & Memory series already covered event logs, durable records, valid time, conflicts, and retrieval. We do not rebuild a memory database here. Agent World State & Partial Observability begins with runtime state estimation: how an action changes the possible worlds, how an observation revises them, and why timeout must preserve unknown. Part 2 will handle active queries, action choice, and when additional observation is worth its cost.</p><div class='callout'><strong>Core judgment:</strong> a historical observation proves what was seen then, not necessarily what exists now. Model prediction may guide the next observation; it is not a verified tool result.</div>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "从 Agent loop 到部分可观测的运行时",
+        "en": "From an agent loop to a partially observed runtime"
+      },
+      "html": {
+        "zh": "<p>普通 agent loop 常画成 observation→reason→action→observation，容易让人以为每次 observation 是完整、即时且正确的环境状态。真实环境更像部分可观测系统：API 可能只返回某资源的一个字段，截图看不到后台事务，页面可能缓存，工具超时只说明客户端没拿到结果。另一个人或服务还能在 Agent 两步之间改状态。模型输入里的那段‘会议室空闲’是带来源的旧证据，不是环境本身。</p><p>Memory 系列的 durable record 回答‘哪些有来源的事实值得跨任务保存并检索’；world-state belief 回答‘此刻为了下一动作，哪些状态仍可能成立’。前者可有 validFrom/validTo 和 supersedes，后者还必须显式处理自身动作、其他参与者、传感器误差与尚未观测到的变化。两者可以共享 event log，却不能把当前估计无条件写成永久用户事实。昨天的音视频 evidence bundle 也只是 observation：即使在采集时同步，动作前仍要考虑世界已转移。</p><p>POMDP 的经典形式把隐藏环境状态、行动、观察和 belief 分开；这不是说每个 LLM Agent 都要运行一个完整的 POMDP 求解器。它提供工程上重要的语义：‘我不知道’是一个合法状态，行动后的世界可能分叉，新的观察应修正估计。ReAct 作者展示 reasoning、action 与 observation 交替的语言模型轨迹；轨迹格式本身不保证 observation 完整或行动已提交，仍需 runtime 给它们状态含义。</p>",
+        "en": "<p>An agent loop is often drawn as observation → reason → action → observation. The drawing can tempt us to treat each observation as a complete, immediate, correct environment state. Real environments are partially observed. An API may return only one field of a resource; a screenshot cannot see a backend transaction; a page can be cached; a tool timeout says only that the client did not receive an outcome. Another person or service can change state between the agent's steps. 'Room available' in the model context is old, sourced evidence, not the environment itself.</p><p>The earlier Memory series answered which sourced facts should be stored and retrieved across tasks. A world-state belief answers which states may hold now for the next action. A durable record can carry validFrom, validTo, and supersedes. A runtime belief must additionally account for the agent's own actions, other actors, sensor error, and unobserved change. Both may share an event log, but a current estimate must not silently become a permanent user fact. Yesterday's audiovisual evidence bundle is also an observation: even if capture was synchronized, the world may have changed before action.</p><p>The classic POMDP formalism separates hidden state, action, observation, and belief. That does not imply that every LLM agent needs a full POMDP solver. It supplies useful engineering semantics: 'unknown' is valid, an action can branch the possible world, and new observations should revise the estimate. ReAct demonstrates interleaved reasoning, action, and observation in language-model trajectories; that trace format alone does not guarantee complete observations or committed actions. A runtime must give them operational meaning.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "机制：预测，再观测，再校正",
+        "en": "Mechanism: predict, observe, then correct"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 242' role='img' aria-labelledby='belief-zh-title belief-zh-desc'><title id='belief-zh-title'>Agent 的状态估计循环</title><desc id='belief-zh-desc'>左侧是上一时刻的状态估计，不等于真实隐藏状态。执行动作后经转移模型产生多种可能；右侧新观察按来源和可靠性更新估计。工具授权与提交仍在外层控制，预测不能直接写为已证实事实。</desc><rect x='20' y='60' width='137' height='93' rx='8' fill='#20312a'/><rect x='219' y='60' width='144' height='93' rx='8' fill='#8e6935'/><rect x='424' y='60' width='145' height='93' rx='8' fill='#9f4939'/><rect x='629' y='60' width='114' height='93' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='16'><text x='32' y='98'>旧 belief</text><text x='32' y='128'>多种可能</text><text x='231' y='98'>动作 / 转移</text><text x='231' y='128'>预测下一态</text><text x='436' y='98'>新 observation</text><text x='436' y='128'>来源与误差</text><text x='641' y='98'>新 belief</text><text x='641' y='128'>保留未知</text></g><path d='M157 106H219 M363 106H424 M569 106H629' stroke='#9a8b79' stroke-width='3'/><text x='77' y='31' fill='#35433b' font-size='16' font-family='sans-serif'>真实世界不可直接读取</text><text x='82' y='204' fill='#35433b' font-size='15' font-family='sans-serif'>预测用于下一步决策；提交与核验由外层 runtime 执行</text></svg><figcaption>原创示意：belief 是时间索引的状态估计，不是模型口头断言；图中转移和观察质量需按场景校准。手机可横向滑动。</figcaption></figure><h3>1. 定义最小状态，而非复制整个世界</h3><p>对预订任务，可建 room R 的状态集合：free、held_by_us、booked_by_us、booked_by_other、unknown。每个字段保存 entity ID、观察来源、event/availability time、版本、是否已核验和未决 action ID。不要把日历全文、整张截图或一段自然语言计划塞进一个不可检查的‘world model’字符串。若看不到后台占用者，不能凭空填 booked_by_other；unknown 与可能集合要保留。</p><h3>2. 动作先产生预测分支</h3><p>调用 book(room R, slot) 后，客户端可能收到成功、失败或超时。超时不等于请求未到达，预测状态要包含‘未提交’与‘已提交但回执丢失’；如果资源可被其他人抢占，还包含竞争状态。状态转移模型可以由 API 合同、历史测量或仿真给出，但未知概率不应由 LLM 随口编造。先写 action intent 与幂等键，再发请求；返回未知时禁止无条件重试，把它当作需要查询的分叉。</p><h3>3. 新观察按来源校正，不覆盖历史</h3><p>预订接口的权威查询可能返回 transaction ID 与最终状态；旧页面仍显示 free，只能作为过期 UI 证据。读取新 API 结果后更新当前 belief，同时保留原观察和为何改判的链。若 API 与 UI 冲突，按字段和时间判断谁对该字段权威，不是‘最新字符串赢’。截图 OCR、模型总结、工具 HTTP 200、数据库状态各有不同观察模型。模型说‘成功’并非新传感器；它只是解释已有证据。</p><h3>4. 把估计与控制状态分离</h3><p>belief 可标记概率、候选集合或 confidence band，但授权、审批、未决副作用和外部事务 ID 属于 typed control state，不能被概率融合抹掉。高风险行动前必须满足显式 precondition：主体获权、目标仍存在、参数与确认一致、旧 action 结果已解决。HTTP 的 If-Match/ETag 可在支持条件写的资源上防止以旧版本盲写；它不是所有工具都有的万能事务。若条件失败，应重新观察和协商，而非绕过保护强行提交。</p><h3>5. 为每次决策冻结 as-of 快照</h3><p>给模型的状态摘要应写清‘10:00:00 观察空闲；10:00:05 预订请求超时；当前是否成功未知’，而不是‘会议室空闲’或‘已订好’。as-of 时间、可用证据、未决操作和 confidence 标签要与 action epoch 绑定。迟到回执可形成下一版本，不得悄悄把旧决策改写成当时已知。这样回放可回答‘Agent 何时知道什么’，也能区分模型推断错、工具回执缺失与环境竞争。</p><h3>6. 区分工程 ledger 与学习型 world model</h3><p>Ha 与 Schmidhuber 的 World Models、DreamerV3 等作者研究学习到的潜在动力学用于预测或规划；它们报告的结果属于其环境和设置。业务 Agent 可以用学习模型预测‘页面可能跳转’或‘对象可能消失’，但这类 latent state 不会自动给出真实 booking ID、权限或事务提交证明。实践常是混合：typed ledger 管可核查字段与副作用，预测模型用于排序下一步观察。两者不能互相冒充。</p>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 242' role='img' aria-labelledby='belief-en-title belief-en-desc'><title id='belief-en-title'>An agent state-estimation loop</title><desc id='belief-en-desc'>A prior belief on the left is not the true hidden state. An action and transition model predict several possibilities. A new observation with provenance and error then updates the belief. Tool authority and commitment remain in an outer control layer; prediction cannot be written as verified fact.</desc><rect x='20' y='60' width='137' height='93' rx='8' fill='#20312a'/><rect x='219' y='60' width='144' height='93' rx='8' fill='#8e6935'/><rect x='424' y='60' width='145' height='93' rx='8' fill='#9f4939'/><rect x='629' y='60' width='114' height='93' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='32' y='98'>Prior belief</text><text x='32' y='128'>Possibilities</text><text x='231' y='98'>Action / transition</text><text x='231' y='128'>Predict next state</text><text x='436' y='98'>New observation</text><text x='436' y='128'>Source and error</text><text x='641' y='98'>New belief</text><text x='641' y='128'>Uncertain</text></g><path d='M157 106H219 M363 106H424 M569 106H629' stroke='#9a8b79' stroke-width='3'/><text x='77' y='31' fill='#35433b' font-size='16' font-family='sans-serif'>The true world is not directly readable</text><text x='82' y='204' fill='#35433b' font-size='15' font-family='sans-serif'>Prediction guides the next step; outer runtime commits and verifies</text></svg><figcaption>Original explanatory diagram: belief is a time-indexed state estimate, not the model's verbal assertion. Transition and observation quality must be calibrated for the setting. Swipe horizontally on a phone.</figcaption></figure><h3>1. Specify a minimal state, not a copy of the world</h3><p>For a booking task, give room R states such as free, held_by_us, booked_by_us, booked_by_other, and unknown. Each field carries entity ID, observation source, event and availability time, version, verification status, and unresolved action ID. Do not pack the full calendar, entire screenshot, and a natural-language plan into one uninspectable 'world model' string. If the backend does not expose who holds a room, do not invent booked_by_other. Preserve unknown and the possible-state set.</p><h3>2. An action first creates predictive branches</h3><p>After book(room R, slot), the client may receive success, failure, or timeout. Timeout does not imply that the request failed to arrive. The predicted state must include 'not committed' and 'committed but response lost'; if another actor can race, include competing occupancy states. An API contract, measured history, or simulation can supply a transition model. The LLM should not improvise unknown probabilities. Record an action intent and idempotency key before sending. On an unknown outcome, prohibit unconditional retry and treat the fork as a reason to query.</p><h3>3. Correct with new observations rather than overwriting history</h3><p>An authoritative booking query may return transaction ID and final state. A stale page may still say free; that is aged UI evidence. Update the current belief after the new API result while retaining the old observation and the reason for revision. If API and UI conflict, decide which source is authoritative for that field at that time, not which string arrived last. Screenshot OCR, a model summary, HTTP 200, and database state have different observation models. The model's statement 'success' is not a new sensor; it interprets existing evidence.</p><h3>4. Separate estimation from control state</h3><p>A belief may hold probabilities, possible-state sets, or confidence bands. Authorization, approval, unresolved side effects, and external transaction IDs belong to typed control state and must not be averaged away by probabilistic fusion. Before a high-risk action, explicit preconditions should hold: the principal is authorized, the target still exists, parameters match confirmation, and the previous action's outcome is resolved. HTTP If-Match and ETag can prevent blind writes against a stale version when a resource supports conditional updates. They are not a universal transaction mechanism for every tool. A failed precondition requires reobservation and negotiation, not a forced write.</p><h3>5. Freeze an as-of snapshot for each decision</h3><p>Tell the model 'room free observed at 10:00:00; booking request timed out at 10:00:05; success currently unknown,' not 'room free' or 'booked.' Bind as-of time, available evidence, pending operations, and confidence labels to the action epoch. A late receipt creates a later version; it must not silently rewrite an earlier decision as though the result had already been known. A replay can then answer what the agent knew when, distinguishing wrong model inference, missing tool receipt, and environmental contention.</p><h3>6. Distinguish an engineering ledger from a learned world model</h3><p>Ha and Schmidhuber's World Models and DreamerV3 study learned latent dynamics for prediction or planning; author-reported results belong to their environments and settings. A business agent can use a learned model to predict that a page might navigate or an object might disappear. Such a latent state does not automatically produce a real booking ID, permission grant, or proof of transaction commitment. A useful deployment is often hybrid: a typed ledger carries verifiable fields and effects, while a predictive model ranks what to observe next. Neither is a substitute for the other.</p>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "必要数学：belief 更新不等于事实提交",
+        "en": "Essential mathematics: belief update is not fact commitment"
+      },
+      "html": {
+        "zh": "<p>设 s_t 为时刻 t 看不全的真实环境状态，a_t 为 Agent 动作，o_{t+1} 为下一次观察，b_t(s) 为当前对状态 s 的估计分布。动作后先做预测：<strong>b⁻_{t+1}(s')=Σ_s T(s'|s,a_t)b_t(s)</strong>。T 是环境从 s 经 a_t 到 s' 的转移可能性；求和把所有旧状态的路径合并。意义是：book 请求发出后，belief 应分到多个可能后果，而不是直接改成 booked。</p><p>拿到观察后再校正：<strong>b_{t+1}(s')=O(o_{t+1}|s',a_t)b⁻_{t+1}(s') / Σ_u O(o_{t+1}|u,a_t)b⁻_{t+1}(u)</strong>。O 是在真实状态 s' 且执行 a_t 时看到该观察的可能性，分母让所有候选概率重新归一；u 遍历候选状态。若 API 查询在 booked_by_us 时更可能返回‘已预订’，该观察提高对应 belief。但若所谓观察只是旧 UI 缓存，O 不同，不能同权更新。T/O 若未经校准，这些数只是说明机制的模型，不能伪装成实测概率。</p><p>举一个只含 booked 与 not_booked 的教学例子：超时后预测 P(booked)=0.4，P(not_booked)=0.6；一个新查询返回 booked，在已订时出现概率假设为 0.95，未订时误报概率假设为 0.05。更新后 <strong>P(booked|reply)=0.95×0.4/(0.95×0.4+0.05×0.6)≈0.927</strong>。这不是现实预订 API 的可靠性数据，且 92.7% 仍不等于有权宣布交易完成。若有权威 transaction ID，应用应按合同核验；若没有，高风险结果仍需查证或交人工。</p>",
+        "en": "<p>Let s_t be the environment's partly hidden state at time t, a_t the agent's action, o_{t+1} the next observation, and b_t(s) the current belief distribution over state s. First predict after the action: <strong>b⁻_{t+1}(s')=Σ_s T(s'|s,a_t)b_t(s)</strong>. T is the chance of moving from s to s' under a_t; the sum combines paths from all prior states. Operationally, after a book request is sent, the belief branches over possible outcomes rather than jumping straight to booked.</p><p>Then correct with the observation: <strong>b_{t+1}(s')=O(o_{t+1}|s',a_t)b⁻_{t+1}(s') / Σ_u O(o_{t+1}|u,a_t)b⁻_{t+1}(u)</strong>. O is the likelihood of seeing this observation under action a_t if the true state is s'; the denominator normalizes over candidate states u. A booking API response 'booked' increases belief in booked_by_us if that response is more likely under that state. A stale UI cache has a different observation model and must not receive the same weight. Without calibrated T and O, these numbers illustrate a mechanism; they are not measured probabilities.</p><p>In a deliberately simplified two-state teaching example, suppose a timeout leaves P(booked)=0.4 and P(not_booked)=0.6. A fresh query says booked. Assume it returns that result with probability 0.95 when booked and falsely with probability 0.05 when not booked. Then <strong>P(booked|reply)=0.95×0.4/(0.95×0.4+0.05×0.6)≈0.927</strong>. These are invented instructional numbers, not reliability measurements of a real calendar API. Even 92.7 percent is not permission to claim transactional success. If an authoritative transaction ID exists, verify it under the API contract; otherwise a high-risk outcome still needs reconciliation or human review.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统的落地影响",
+        "en": "What this changes in an agent system"
+      },
+      "html": {
+        "zh": "<p>运行时的数据契约至少分五层：不可变事件记录‘请求发出/回执/观察’，typed control state 保存未决 action 与权限，world-state belief 保存当前可能状态，memory index 供跨任务查历史，model context 只是当前决策的投影。这样一次工具超时不会因摘要改写成为‘已成功’，也不会因为 vector 检索到旧页面就覆盖新事务。状态估计与业务账本可以共用 ID，却必须有不同写入权限。</p><p>资源更新接口若支持版本条件，应在读取时保存 ETag 或对象版本，执行时带 If-Match；失败后重新读取并判断用户意图是否仍可满足。对不支持条件写的工具，采用业务幂等键、权威状态查询或人工接管。Agent 的 belief 只能决定‘下一步查什么’，不能授予越权操作；权限仍在 broker。用户看见的回复也要区分 confirmed、predicted 和 unknown，避免把高置信预测说成‘已完成’。</p><p>评测不该只问‘最终答案对不对’。构造同一初始状态下的竞争者抢占、旧 UI 缓存、API 超时、回执延迟、请求提交后断线与设备切换；分别看 belief 是否保留正确可能集合、是否选择了能区分分支的观察、是否误重试、是否在未知时越权提交，以及权威终态和 p95/p99 完成延迟。失败归因要区分状态预测、观察可靠性、外层权限与执行恢复；下一篇会专门讨论主动观测的选择。</p>",
+        "en": "<p>A runtime data contract needs at least five distinct layers. An immutable event log records requests, receipts, and observations. Typed control state holds pending actions and authority. World-state belief represents current possibilities. A memory index retrieves history across tasks. Model context is only a projection for one decision. A timed-out tool cannot become 'succeeded' through summary wording, and an old page retrieved by a vector index cannot overwrite a newer transaction. State estimation and business ledger may share identifiers but must have different write permissions.</p><p>If an update API supports version conditions, store the ETag or object version on read and send If-Match on write. On failure, reread and decide whether the user's goal is still feasible. For tools without conditional writes, use business idempotency keys, authoritative status queries, or human handoff. Belief can decide what to inspect next; it cannot grant an unauthorized operation. Authority stays at the broker. User-facing replies should distinguish confirmed, predicted, and unknown rather than narrating a high-confidence prediction as 'completed.'</p><p>Evaluation should not only ask whether the final answer is right. Starting from the same state, introduce a competitor booking, stale UI cache, API timeout, delayed receipt, post-commit disconnect, and device switch. Inspect whether belief retained the right possibility set, selected an observation that distinguishes branches, avoided duplicate retry, withheld unauthorized action under uncertainty, and reached the authoritative final state within p95 or p99 completion latency. Attribute failures to transition prediction, observation reliability, outer authority, or recovery. Part 2 will focus on choosing active observations.</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<ul><li><strong>最后截图就是当前世界：</strong>页面可能缓存或被他人改写；保存采集时刻和版本，行动前重验。</li><li><strong>工具超时等于失败：</strong>副作用可能提交、回执丢失；查询权威状态并使用幂等键。</li><li><strong>模型说成功就更新 state：</strong>自然语言是解释，不是观察或事务回执。</li><li><strong>精确概率总比 unknown 好：</strong>未校准 T/O 会产生虚假确定性；可用候选集合和硬状态表示。</li><li><strong>所有旧记录直接加入 context：</strong>历史证据有时效与权限；memory 检索与当前 belief 分层。</li><li><strong>有 ETag 就万无一失：</strong>条件写只保护支持该资源版本语义的操作；跨资源流程仍需事务/补偿设计。</li><li><strong>无限重查最安全：</strong>观察有延迟、费用和隐私成本；按动作风险选复核点。</li></ul><p>细致的状态估计增加工程复杂度，却能把‘我不知道’变成可操作分支。简单任务也许只需 confirmed/unknown 和一次权威查询；复杂协作环境才值得维护概率 belief。不要为形式化而形式化，更不能让漂亮的 belief 图掩盖权限、幂等与核验缺口。</p>",
+        "en": "<ul><li><strong>The last screenshot is the current world:</strong> the page may be cached or changed by another actor. Retain capture time and version; recheck before action.</li><li><strong>Tool timeout means failure:</strong> an effect may have committed while its response was lost. Query authority and use an idempotency key.</li><li><strong>The model says success, so update state:</strong> narration is an interpretation, not a sensor or transaction receipt.</li><li><strong>A precise probability is always better than unknown:</strong> uncalibrated transition and observation models manufacture certainty. A possible-state set and hard status may be safer.</li><li><strong>Put every old record in context:</strong> history has validity and access bounds. Separate memory retrieval from current belief.</li><li><strong>ETag makes everything safe:</strong> a conditional write protects only operations with that resource's version semantics. Cross-resource workflows need transaction or compensation design.</li><li><strong>Recheck forever to be safe:</strong> observation costs time, money, and privacy. Place checks according to action risk.</li></ul><p>Detailed state estimation adds complexity but turns 'I do not know' into an actionable branch. A simple task may need only confirmed versus unknown and one authoritative query; a complex collaborative environment may justify probabilistic belief. Formalism should serve decisions, not decorate them, and a pretty belief diagram cannot conceal gaps in permission, idempotency, or verification.</p>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可复用的技术判断",
+        "en": "Reusable technical judgments"
+      },
+      "html": {
+        "zh": "<ul><li>world-state belief 是当前可能状态，不等于 event log、durable memory 或模型文本摘要。</li><li>动作先产生可能后果，新观察再校正；超时须保留已提交/未提交分支。</li><li>观察按来源、时刻和可靠性解释，旧 UI 与权威事务查询不能等价。</li><li>未校准概率不如诚实的 unknown；预测不能替代权限、事务 ID 与后置条件。</li><li>高风险动作前核验当前前提，条件写、幂等与权威查询各守不同边界。</li></ul>",
+        "en": "<ul><li>World-state belief describes current possibilities; it is not an event log, durable memory, or model-written summary.</li><li>An action branches possible outcomes; a later observation corrects them. Timeout retains committed and uncommitted possibilities.</li><li>Interpret observations by source, time, and reliability. A stale UI and authoritative transaction query are not equivalent.</li><li>Honest unknown is better than uncalibrated precision. Prediction cannot replace authority, transaction IDs, or postconditions.</li><li>Recheck current preconditions before high-risk action. Conditional writes, idempotency, and status queries protect different boundaries.</li></ul>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "一手资料与证据等级",
+        "en": "Primary sources and evidence tiers"
+      },
+      "html": {
+        "zh": "<ul class='source-list'><li><a href='https://doi.org/10.1016/S0004-3702(98)00023-X'>Kaelbling, Littman & Cassandra, Planning and Acting in Partially Observable Stochastic Domains</a> — POMDP belief/行动/观察形式化的原始论文；本文不是要求业务 Agent 运行完整求解器。</li><li><a href='https://arxiv.org/abs/2210.03629'>ReAct</a> — 作者研究 reasoning、action、observation 交替轨迹；轨迹不定义外部事务状态。</li><li><a href='https://arxiv.org/abs/1803.10122'>World Models</a> — 作者研究学习到的环境表示与动力学；其结果限于论文环境。</li><li><a href='https://arxiv.org/abs/2301.04104'>DreamerV3</a> — 作者报告潜在 world model 用于多任务决策；不等于日历 API 回执。</li><li><a href='https://www.rfc-editor.org/rfc/rfc9110.html#section-13.1.1'>RFC 9110 If-Match</a> — HTTP 条件请求的规范；资源是否支持及语义仍需按具体 API 核验。</li></ul><p>链接和标题已于 2026-11-01 核验。room 状态集合、typed ledger、未决工具处理与示例概率是本文编辑性工程设计；不宣称论文或 RFC 证明某个 Agent 已安全上线。</p>",
+        "en": "<ul class='source-list'><li><a href='https://doi.org/10.1016/S0004-3702(98)00023-X'>Kaelbling, Littman & Cassandra, Planning and Acting in Partially Observable Stochastic Domains</a> — the original POMDP treatment of belief, action, and observation. We do not require a business agent to run a full solver.</li><li><a href='https://arxiv.org/abs/2210.03629'>ReAct</a> — the authors study interleaved reasoning, action, and observation trajectories; a trace does not define external transaction state.</li><li><a href='https://arxiv.org/abs/1803.10122'>World Models</a> — the authors study learned environment representation and dynamics; reported results belong to their environments.</li><li><a href='https://arxiv.org/abs/2301.04104'>DreamerV3</a> — the authors report latent world models for diverse decisions, not receipts from a calendar API.</li><li><a href='https://www.rfc-editor.org/rfc/rfc9110.html#section-13.1.1'>RFC 9110 If-Match</a> — the HTTP conditional-request specification. Whether a resource supports it and its meaning must be checked against the concrete API.</li></ul><p>Links and titles were checked on 2026-11-01. The room-state set, typed ledger, pending-tool handling, and example probabilities are editorial engineering designs. No cited paper or RFC proves that a particular agent is safe to deploy.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "已建立与下一篇起点",
+        "en": "Established and next starting point"
+      },
+      "html": {
+        "zh": "<p><strong>今天已建立：</strong>承接跨模态专题的‘当时可用证据’，但将其降为 world-state belief 的观察而非当前事实；状态随自身动作和其他参与者转移，先预测可能分支，再按来源可靠性更新。book 超时必须保留 unknown；typed control state、权威回执与权限门不能被模型预测替换。与旧 memory 专题不同，本篇追的是一次执行中随时间变化的隐藏环境状态。</p><p><strong>尚未讲完：</strong>当 belief 同时包含‘请求可能成功’与‘可能失败’，Agent 应先查哪种证据？额外观察何时值得其延迟、token 与隐私成本？何时应暂停、澄清、重试、补偿或交人工？</p><p><strong>下一篇起点：</strong>Agent World State & Partial Observability 2/2 讨论主动感知与行动选择：用信息价值挑选查询，按风险设置停止/提交门，并以对照轨迹验收；不重复今天的 Bayes 更新公式或记忆库生命周期。</p>",
+        "en": "<p><strong>Established today:</strong> evidence that was available at the time, as in the multimodal series, is an observation for a world-state belief rather than a current fact. State changes through the agent's own action and other actors; predict possible branches first, then update from observations according to their source reliability. A timed-out booking retains unknown. Typed control state, authoritative receipts, and authority gates cannot be replaced by model prediction. Unlike the earlier Memory series, today's subject is the hidden environment evolving during one execution.</p><p><strong>Still unresolved:</strong> if belief includes both 'the request may have succeeded' and 'it may have failed,' which evidence should the agent inspect first? When does additional observation justify its latency, token, and privacy cost? When should it pause, clarify, retry, compensate, or hand off?</p><p><strong>Next starting point:</strong> Agent World State & Partial Observability Part 2 of 2 studies active sensing and action selection: choose queries by information value, set risk-tiered stop and commit gates, and evaluate with matched trajectories without repeating today's Bayesian update equation or memory-store lifecycle.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "continues",
+    "established": {
+      "zh": [
+        "world-state belief 表示当前可能状态，区别于 event log、durable memory 与模型摘要",
+        "动作先预测多种后果，新观察再按来源可靠性校正；超时保留已提交/未提交分支",
+        "未校准概率不能当事实，typed control state、权限与权威回执独立于 belief",
+        "行动前应核验当前前提；If-Match、幂等键和权威查询分别保护不同边界"
+      ],
+      "en": [
+        "World-state belief represents current possibilities, distinct from event log, durable memory, and model summary",
+        "An action predicts multiple outcomes; later observations correct by source reliability, while timeout retains committed and uncommitted branches",
+        "Uncalibrated probabilities are not facts; typed control state, authority, and receipts remain independent of belief",
+        "Check current preconditions before action; If-Match, idempotency keys, and authoritative queries protect different boundaries"
+      ]
+    },
+    "next": {
+      "zh": "Agent World State & Partial Observability 2/2：主动感知与行动选择，用信息价值挑选查询，在未知状态下决定暂停、澄清、重试、补偿或交人工，并做风险分层验收。",
+      "en": "Agent World State & Partial Observability 2/2: active sensing and action choice, selecting queries by information value, choosing pause, clarify, retry, compensation, or handoff under uncertainty, and risk-tiered evaluation."
+    }
+  }
+}

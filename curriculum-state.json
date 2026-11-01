@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-31",
-  "latestIssueDate": "2026-10-31",
+  "generatedAt": "2026-11-01",
+  "latestIssueDate": "2026-11-01",
   "completedTopics": [
     "realtime-multimodal-conflict-attribution-tool-commit",
     "audio-realtime-evaluation-privacy-security-release-gates",
@@ -34,6 +34,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-01",
+      "topicId": "world-state-belief-update-observation-action",
+      "seriesId": "agent-world-state-belief-tracking",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-10-31",
       "topicId": "realtime-multimodal-conflict-attribution-tool-commit",
@@ -364,5 +371,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "agent-world-state-belief-tracking",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "world-state belief 表示当前可能状态，区别于 event log、durable memory 与模型摘要",
+        "动作先预测多种后果，新观察再按来源可靠性校正；超时保留已提交/未提交分支",
+        "未校准概率不能当事实，typed control state、权限与权威回执独立于 belief",
+        "行动前应核验当前前提；If-Match、幂等键和权威查询分别保护不同边界"
+      ],
+      "en": [
+        "World-state belief represents current possibilities, distinct from event log, durable memory, and model summary",
+        "An action predicts multiple outcomes; later observations correct by source reliability, while timeout retains committed and uncommitted branches",
+        "Uncalibrated probabilities are not facts; typed control state, authority, and receipts remain independent of belief",
+        "Check current preconditions before action; If-Match, idempotency keys, and authoritative queries protect different boundaries"
+      ]
+    },
+    "next": {
+      "zh": "Agent World State & Partial Observability 2/2：主动感知与行动选择，用信息价值挑选查询，在未知状态下决定暂停、澄清、重试、补偿或交人工，并做风险分层验收。",
+      "en": "Agent World State & Partial Observability 2/2: active sensing and action choice, selecting queries by information value, choosing pause, clarify, retry, compensation, or handoff under uncertainty, and risk-tiered evaluation."
+    }
+  }
 }
