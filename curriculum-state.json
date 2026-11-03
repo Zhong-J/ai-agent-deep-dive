@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-02",
-  "latestIssueDate": "2026-11-02",
+  "generatedAt": "2026-11-03",
+  "latestIssueDate": "2026-11-03",
   "completedTopics": [
     "world-state-active-sensing-value-of-information-action-gates",
     "realtime-multimodal-conflict-attribution-tool-commit",
@@ -36,6 +36,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-03",
+      "topicId": "model-based-planning-rollout-horizon-replanning",
+      "seriesId": "agent-model-based-planning-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-11-02",
       "topicId": "world-state-active-sensing-value-of-information-action-gates",
@@ -380,5 +387,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "agent-model-based-planning-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "model-based rollout 从有来源的当前 belief 展开想象分支；predicted 不等于 observed 或 verified",
+        "规划深度 H 增加远期可见性，也扩大 B^H 分支计算与关键模型错误风险",
+        "broker 仅执行当前获授权第一步，真实 observation 后更新 belief、废弃旧计划并重定根",
+        "文本思路搜索、潜在 world model 与业务环境 verifier 有不同职责，不能互相代替"
+      ],
+      "en": [
+        "Model-based rollouts branch imagined futures from a sourced current belief; predicted is not observed or verified",
+        "Horizon H reveals distant effects but grows B^H branching compute and critical model-error exposure",
+        "The broker executes only the authorized first action, then real observation updates belief, expires the old plan, and re-roots",
+        "Textual thought search, latent world models, and business-environment verifiers have distinct roles"
+      ]
+    },
+    "next": {
+      "zh": "Agent Model-Based Planning Internals 2/2：从候选 plan graph 进入有限搜索预算、分支剪枝与高损失路径覆盖、独立 verifier、对照轨迹和安全发布门。",
+      "en": "Agent Model-Based Planning Internals 2/2: allocate finite search over the plan graph, preserve high-loss branches through pruning, and use independent verification, matched trajectories, and safety release gates."
+    }
+  }
 }
