@@ -1,0 +1,136 @@
+{
+  "date": "2026-11-04",
+  "slug": "planning-search-budget-risk-branches-offline-evaluation",
+  "readingMinutes": 20,
+  "topicId": "model-based-planning-search-budget-risk-evaluation",
+  "series": {
+    "id": "agent-model-based-planning-internals",
+    "title": {
+      "zh": "Agent Model-Based Planning Internals",
+      "en": "Agent Model-Based Planning Internals"
+    },
+    "part": 2,
+    "total": 2,
+    "complete": true
+  },
+  "title": {
+    "zh": "搜索树里分数最高的计划，为什么还不能执行？",
+    "en": "Why Can't the Highest-Scoring Plan in the Search Tree Be Executed Yet?"
+  },
+  "dek": {
+    "zh": "有限预算下保留关键风险分支，区分模拟评分与可执行动作，并说明离线日志为何不能验证没走过的路。",
+    "en": "Preserve critical risk branches under finite search, separate simulated scores from executable actions, and expose why logs cannot verify paths never taken."
+  },
+  "tags": [
+    "Planning search",
+    "Branch pruning",
+    "Model exploitation",
+    "Offline evaluation",
+    "Counterfactuals",
+    "Safety gates"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>Agent 在模拟树中找到一条高分路径：改日期、订房、发通知，预计只用三次工具调用。另一条路径要多查一次房间状态、可能追问用户，因此得分低。搜索器为了省 token 剪掉了‘房间被别人抢订’分支。真正执行时，这个小概率却高损失的分支发生，Agent 向全团队发出错误会议地点。<strong>搜索树的最高分是模型和剪枝政策共同制造的结果，不是可执行安全证明。</strong></p><p>昨天 1/2 已区分 imagined、observed、verified：rollout 从有来源的 belief 展开，H 增大远期可见性，也扩大分支计算与预测偏差；broker 只执行当前获授权一步，随后重观测并重新定根。今天 2/2 不重算 G_H 或 B^H，而要回答：有限搜索预算该投给哪些分支？高损失分支如何不被均值剪掉？没有反事实结果的历史日志能验证什么？何时用反应式 baseline，何时允许 planner 进入生产？</p>",
+        "en": "<p>An agent finds a high-scoring simulated route: move the date, book the room, notify the team, with only three tool calls. Another route checks availability again and may ask the user, so its score is lower. To save tokens, the searcher prunes the branch where someone else takes the room. In execution, that low-probability but high-loss branch occurs, and the agent sends the entire team the wrong location. <strong>The top score in a search tree is jointly produced by a model and a pruning policy; it is not proof that the plan is safe to execute.</strong></p><p>Part 1 separated imagined, observed, and verified. A rollout branches from a sourced belief. Larger H exposes distant effects but grows compute and prediction bias. The broker executes only one authorized action, then reobserves and re-roots. This final part does not repeat G_H or B^H. It asks which branches deserve finite compute, how a severe branch survives mean-score pruning, what historical logs can prove without counterfactual outcomes, and when a reactive baseline or a planner belongs in production.</p>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "从想象分支到搜索与裁决",
+        "en": "From imagined branches to search and adjudication"
+      },
+      "html": {
+        "zh": "<p>Model-based planner 至少有三个不同组件：transition model 预测动作后可能怎样；search policy 决定扩展哪些节点；value/risk evaluator 估计分支值得走吗。它们不能互相背书。模型对预订失败过分乐观时，搜索再勤奋也会沿错误动力学挖得更深；搜索器只扩展高均值分支时，再好的模型也可能不把罕见损失传给决策器。业务 verifier 只在真实动作后核验外部终态，不能把模拟分数升级为真值。</p><p>MuZero 作者在游戏等实验中用学到的模型与搜索选择动作，说明学习模型可以服务 planning；但它依赖其训练环境与反馈。MBPO 作者研究何时信任模型并限制模型 rollout 以抑制偏差；PETS 作者使用概率动力学与采样进行控制。这里借鉴的是‘把模型不确定性、深度和搜索预算放进同一决策’的工程结构，而非声称这些控制结果可直接迁移到邮件、日历和浏览器工具。</p><p>这也承接更早的安全/SLO 专题，却不复述通用发布管道。这里独特的失效点是 <em>planner exploitation</em>：搜索会偏向模型恰好预测得过于美好的角落，甚至在真实系统从未执行过的动作上报出精确收益。授权门限定可执行动作；风险门限定必须覆盖的失败路径；测试器要把模型、搜索和执行的错误分层定位。</p>",
+        "en": "<p>A model-based planner has at least three distinct components. A transition model predicts what may follow an action. A search policy chooses nodes to expand. A value and risk evaluator scores branches. They cannot certify one another. If the model is overoptimistic about booking failure, diligent search digs deeper into wrong dynamics. If search expands only high-mean branches, even a good model may never pass a rare severe loss to the decision maker. A business verifier checks external terminal state after real action; it cannot upgrade a simulated score into fact.</p><p>MuZero reports action selection with learned-model search in games and other studied settings; it depends on its training environment and feedback. MBPO studies when to trust a model and limits rollout depth to control bias. PETS uses probabilistic dynamics and sampling for control. We borrow the engineering structure of treating uncertainty, depth, and search budget together, not a claim that those control results transfer unchanged to email, calendars, and browser tools.</p><p>This connects to earlier safety and SLO lessons without repeating a generic release pipeline. The distinctive failure here is planner exploitation: search gravitates toward corners where its model is too optimistic, often assigning precise-looking value to actions never taken in the real system. Authority gates define executable actions. Risk gates define failure paths that cannot be hidden. Evaluation must locate error separately in model, search, and execution.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "机制：有限预算内仍保留危险分支",
+        "en": "Mechanism: preserve dangerous branches within a finite budget"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 278' role='img' aria-labelledby='search-zh-title search-zh-desc'><title id='search-zh-title'>规划搜索与真实执行的双重门</title><desc id='search-zh-desc'>当前 belief 和授权动作先进入有限预算搜索。搜索同时扩展有前景路径和被标记的高损失风险路径，生成候选第一步。独立的 broker 检查权限和当前前提后才执行真实动作；外部 verifier 核对后置条件，反馈用于重新规划。模拟分数不能越过安全门。</desc><rect x='14' y='78' width='125' height='83' rx='8' fill='#20312a'/><rect x='190' y='20' width='176' height='72' rx='8' fill='#8e6935'/><rect x='190' y='146' width='176' height='72' rx='8' fill='#9f4939'/><rect x='417' y='78' width='127' height='83' rx='8' fill='#20312a'/><rect x='595' y='78' width='151' height='83' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='111'>当前 belief</text><text x='27' y='139'>授权动作</text><text x='202' y='50'>前景分支</text><text x='202' y='77'>预算内扩展</text><text x='202' y='176'>高损失分支</text><text x='202' y='203'>风险覆盖保留</text><text x='429' y='111'>broker</text><text x='429' y='139'>当前前提</text><text x='607' y='111'>真实执行</text><text x='607' y='139'>权威 verifier</text></g><path d='M139 105L190 56 M139 136L190 182 M366 56L417 103 M366 182L417 139 M544 119H595' stroke='#9a8b79' stroke-width='3' fill='none'/><text x='49' y='259' fill='#35433b' font-size='15' font-family='sans-serif'>搜索给候选；权限与终态仍由环境中的独立控制面裁决</text></svg><figcaption>原创示意：上下两类分支不是固定算法配额，图强调高损失路径不能被平均收益剪枝完全抹去；手机可横向滑动。</figcaption></figure><h3>1. 先收窄可执行动作，再谈搜索</h3><p>从当前 belief、用户授权和工具合同生成 action catalog。未经批准的付款或外发只能作为威胁场景，不应进入可执行候选。为可执行动作列 precondition、可能副作用、权威 verifier 与无法确认时的停机路径。这样搜索器不能靠提高模拟收益把越权动作‘优化’出来；动作合法性在评分之前决定。</p><h3>2. 将搜索预算分成发现与风险覆盖</h3><p>预算可同时限制模型 token、节点展开数、墙钟时间和调用费用；不同任务不能只凭‘允许思考 30 秒’猜资源。先给每个合理 root action 最低探索量，避免第一条高分路径独占全部预算；之后按价值差异、模型不确定性和关键失败分支分配剩余预算。高风险路径即使模型给低概率，也可由工具合同或安全规则强制保留 sentinel。树搜索、beam 或采样只决定算力使用，不改变真实权限。</p><h3>3. 剪枝时保存排除理由</h3><p>每个剪掉的分支记录 parent belief、动作、预测模型版本、score/uncertainty、剪枝原因与是否触及安全约束。若‘房间被抢订’因均值低被剪掉，审计能直接看到风险覆盖缺口。对互相依赖的动作，例如预订成功后才能发确定地点通知，搜索状态必须保留该条件；不能把不同分支的好结果拼接成一条不存在的计划。模型对同一假设反复自评并非独立证据。</p><h3>4. 用模型分歧提示脆弱区，不把它当保证</h3><p>多个 dynamics 预测若在某一步分歧很大，可缩短 horizon、追加观察或增加真实环境测试。PETS 的概率模型与 MBPO 的短 rollout 说明研究界如何处理模型不确定/偏差；这不是‘ensemble 同意就安全’。模型可能共同漏掉新业务规则、权限变更或罕见竞争者动作。对高损失场景，显式环境注入测试比只看模型方差更有说服力。</p><h3>5. 让 verifier 位于搜索器之外</h3><p>模拟阶段可做确定性检查：schema、动作顺序、预算、授权前提、候选后置条件是否自洽；但‘邮件已送达’只能由真实系统的回执或其他权威观察判定。broker 只执行当前获准第一步，收结果后重规划。若模型把‘请求已接收’当‘已提交’，verifier 应返回 unknown 而非成功。搜索器不得修改 verifier 定义或用自己的文字打分覆盖外部终态。</p><h3>6. 离线日志只揭示已走过的路径</h3><p>历史 trace 记录了旧 policy 实际选的动作及结果，通常没有它没选动作的真实后果。在日志上重算新 planner 的分数，只能检验已执行动作上的预测、格式与部分决策一致性；不能宣称新 planner 选择另一动作时也会成功。可用受控模拟/沙盒构造反事实，但只在模拟器覆盖范围内成立；shadow 模式记录新决策不执行，仍无该分支终态。若权限允许，经过安全门的小流量真实试验才能观测新策略的闭环结果。</p>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 278' role='img' aria-labelledby='search-en-title search-en-desc'><title id='search-en-title'>Two gates from planning search to real execution</title><desc id='search-en-desc'>A current belief and permitted actions enter a finite-budget search. It expands promising branches while retaining designated high-loss risk branches, producing a candidate first action. An independent broker checks authority and current preconditions before real execution. An external verifier checks postconditions and feeds replanning. Simulated scores cannot bypass safety gates.</desc><rect x='14' y='78' width='125' height='83' rx='8' fill='#20312a'/><rect x='190' y='20' width='176' height='72' rx='8' fill='#8e6935'/><rect x='190' y='146' width='176' height='72' rx='8' fill='#9f4939'/><rect x='417' y='78' width='127' height='83' rx='8' fill='#20312a'/><rect x='595' y='78' width='151' height='83' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='111'>Current belief</text><text x='27' y='139'>Permitted acts</text><text x='202' y='50'>Promising branch</text><text x='202' y='77'>Budgeted search</text><text x='202' y='176'>High-loss branch</text><text x='202' y='203'>Keep risk covered</text><text x='429' y='111'>Broker</text><text x='429' y='139'>Preconditions</text><text x='607' y='111'>Real action</text><text x='607' y='139'>External verifier</text></g><path d='M139 105L190 56 M139 136L190 182 M366 56L417 103 M366 182L417 139 M544 119H595' stroke='#9a8b79' stroke-width='3' fill='none'/><text x='49' y='259' fill='#35433b' font-size='15' font-family='sans-serif'>Search proposes; independent control in the real environment judges authority and outcome</text></svg><figcaption>Original explanatory diagram: the two branch types are not a fixed algorithmic quota. A severe path must not vanish solely through mean-value pruning. Swipe horizontally on a phone.</figcaption></figure><h3>1. Bound executable actions before search</h3><p>Construct the action catalog from current belief, user authority, and tool contracts. An unapproved payment or exfiltration may be a threat scenario, not an executable candidate. For each permissible action, record precondition, side effect, authoritative verifier, and stop path when outcome cannot be established. Search cannot optimize an unauthorized act into legality by assigning it a high simulated reward. Eligibility precedes scoring.</p><h3>2. Divide search budget between discovery and risk coverage</h3><p>Budgets may bound model tokens, node expansions, wall-clock time, and call spend at once. 'Think for thirty seconds' does not specify their allocation. Give each plausible root action a minimum exploration allotment so the first high-scoring path cannot monopolize search. Allocate the remainder by value differences, model uncertainty, and critical failure paths. A severe branch may receive a sentinel slot from a tool contract or safety rule even if the model assigns low probability. Tree search, beam search, and sampling spend compute; none changes real permission.</p><h3>3. Record why a branch was pruned</h3><p>For each discarded branch keep parent belief, action, predictive-model version, score and uncertainty, pruning reason, and whether it touched a safety constraint. If 'room taken by a competitor' disappeared because of its low mean score, an audit can reveal that coverage gap. When actions depend on one another—only a successful booking licenses a confirmed-location announcement—the search state must retain the condition. It cannot splice good outcomes from incompatible branches into a path that never existed. Repeated self-grading by one model is not independent evidence.</p><h3>4. Use model disagreement as a warning, not a guarantee</h3><p>If multiple dynamics models disagree sharply at one transition, shorten horizon, observe again, or add real-environment tests. PETS' probabilistic models and MBPO's short rollouts illustrate research approaches to uncertainty and bias; neither means 'ensemble agreement equals safe.' Models may share a blind spot for a new business rule, permission change, or rare competing action. Explicit environment fault injection for severe cases is stronger evidence than variance alone.</p><h3>5. Keep the verifier outside search</h3><p>Simulation can run deterministic checks: schema, action order, budget, authority preconditions, and whether candidate postconditions are internally coherent. But 'mail delivered' needs a real receipt or other authoritative observation. The broker executes only the authorized first action and replans after its result. If a model mistakes 'request accepted' for 'effect committed,' the verifier should return unknown, not success. The searcher must not edit verifier definitions or override an external outcome with its own prose score.</p><h3>6. Logs reveal only taken paths</h3><p>A historical trace records the old policy's chosen actions and outcomes. It usually lacks the true result of actions not taken. Rescoring a new planner on that log can test predictions for executed actions, output structure, and some decision consistency. It cannot prove the new planner would succeed when it chooses a different action. Controlled simulators and sandboxes can supply counterfactuals only within their modeled scope. A shadow planner records new decisions without executing them, so its alternate branches still have no terminal outcome. If authority permits, a safety-gated small live trial is needed to observe the new policy's closed-loop results.</p>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "必要数学：预算、关键覆盖与反事实缺口",
+        "en": "Essential mathematics: budget, critical coverage, and counterfactual gaps"
+      },
+      "html": {
+        "zh": "<p>搜索预算先作可执行约束：<strong>Σ_i c_i≤C_search</strong>。i 遍历被展开的节点，c_i 是该节点的模型/工具模拟成本，C_search 是本任务总预算；若同时限制 token、墙钟与费用，应分别写三条约束，而非把单位不同的量直接相加。预算不足时减少可选探索或停机，不能剪掉权限核验与真实后置条件。</p><p>在受控测试集中，令 G 为标注的关键高损失分支集合，R 为剪枝后仍被 planner 保留/显式检查的分支集合，可定义 <strong>CriticalCoverage=|G∩R|/|G|</strong>。分子是被保留的关键分支数，分母是测试器已标注的关键分支数；G 为空时该比率不定义。它不是生产世界里所有风险的 recall，因为未知攻击和新业务状态不在 G 内；但能发现‘均值上升同时删掉已知危险路径’的退化。</p><p>离线策略评估的一个形式使用轨迹权重 <strong>w(τ)=∏_{t=1}^{H}π(a_t|h_t)/μ(a_t|h_t)</strong>：τ 是历史轨迹，π 是候选 planner 在历史 h_t 下选动作 a_t 的概率，μ 是收集日志的旧策略概率，H 是轨迹长度。只有 μ 已知或可可靠估计、且对 π 可能选的动作有正支持时，权重才可定义；长乘积还会造成高方差。Doubly Robust 等作者研究在特定假设下改进离线估计，CQL 作者研究离线数据分布外动作的风险；这些方法不能在 μ=0 或缺真实反事实时凭空生成新动作后果。许多确定性业务 Agent 日志没有可靠 propensities，故应诚实报告‘无法用此日志证明替代动作成功’，转而做可控测试与有门槛的在线验证。</p>",
+        "en": "<p>Start with an executable search constraint: <strong>Σ_i c_i≤C_search</strong>. Index i runs over expanded nodes, c_i is model or simulated-tool cost for one node, and C_search is the task's total budget. If tokens, wall time, and money are all constrained, write separate inequalities; quantities with different units cannot simply be summed. When budget runs out, reduce optional exploration or stop. Do not prune authority checks or real postcondition verification.</p><p>In a controlled test, let G be annotated critical high-loss branches and R the branches retained or explicitly checked after pruning. Define <strong>CriticalCoverage=|G∩R|/|G|</strong>. The numerator counts retained critical branches; the denominator counts critical branches known to the test harness. The ratio is undefined when G is empty. It is not recall over every production risk—unknown attacks and new business states are outside G—but it detects a regression where mean score improves while known dangerous paths disappear.</p><p>One form of offline policy evaluation uses trajectory weights <strong>w(τ)=∏_{t=1}^{H}π(a_t|h_t)/μ(a_t|h_t)</strong>. Here τ is a logged trajectory; π is the candidate planner's probability of selecting action a_t given history h_t; μ is the old logging policy's probability; and H is trajectory length. The weight is defined only when μ is known or reliably estimated and gives positive support to actions π may take. Long products can also create high variance. Doubly Robust studies offline estimation under specific assumptions, while CQL addresses actions outside the offline data distribution. Neither invents a real counterfactual when μ is zero or an outcome was never observed. Many deterministic business-agent logs lack reliable propensities; honestly report that they cannot prove an alternate action would succeed, then use controlled tests and gated online validation.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统与发布的影响",
+        "en": "Implications for agent systems and release"
+      },
+      "html": {
+        "zh": "<p>plan graph 需要记录两种预算账本：搜索耗费多少，以及执行/核验还预留多少。节点字段包含 root belief 与 model version、动作可执行性、预测分支、风险标签、剪枝理由、是否被真实观察证实。若搜索把所有资源花在想象并留不出真实查询/审批预算，最优计划也无法安全落地。上线时用固定 task class、工具权限与风险矩阵比较 planner 和 react-only baseline，不能在候选路线使用更好的数据或更宽的权限。</p><p>评测分三层：模型 one-step fidelity 与校准，搜索的 root action/关键分支选择，以及真实闭环的 verified outcome。对沙盒能穷举的小任务，可计算 planner 与 oracle 的差距；对真实业务，未执行动作没有观测结果，只能把 shadow policy 的选择当候选，不能计成功。动态 UI、他人竞争、工具超时和低概率高损失事件都要注入；记录 first divergence 以定位模型错、剪枝错还是 broker/verifier 错。</p><p>发布门应同时看安全和效用：越权/重复副作用为独立阻断，关键分支覆盖不能退化，安全 verified outcome 相比反应式基线有足够收益，p95/p99 终态延迟和每个完成任务成本可接受。若仅在模拟器中胜出，先 shadow 再低风险 canary；高风险动作依旧由外层授权与实时前提控制。canary 只能检测所见流量，不能证明未知场景永久安全；模型、工具 schema 或业务规则变化后重新校准搜索预算与分支政策。</p>",
+        "en": "<p>A plan graph needs two budget ledgers: what search has spent and what remains for real execution and verification. Node fields include root belief and model version, action eligibility, predicted branches, risk labels, pruning reasons, and whether a real observation later corroborated the node. A planner that spends everything on imagination but leaves no budget for a real query or approval cannot safely deliver its top plan. Compare planner and reactive baseline under the same task classes, tool authority, and risk matrix. Do not give the candidate better data or broader permissions.</p><p>Evaluate three layers: one-step model fidelity and calibration; search quality at the root and on critical branches; and verified outcome in a real closed loop. A small sandbox task whose branches can be enumerated can compare the planner to an oracle. In a real business environment, actions never taken have no observed outcome. A shadow policy's decisions are candidates, not successes. Inject dynamic UI, other-actor competition, tool timeouts, and rare severe events; track first divergence to locate a model, pruning, broker, or verifier error.</p><p>Release jointly on safety and utility. Unauthorized or duplicate effects are independent blockers. Critical-branch coverage must not degrade. Safe verified outcome should improve enough over a reactive baseline, with acceptable p95 and p99 terminal latency and cost per completed task. A simulator-only win starts with shadowing and then a low-risk canary. High-risk actions remain under outer authority and fresh preconditions. A canary observes only its traffic, not permanent safety under unknown scenarios. Model, tool-schema, or business-rule changes require recalibration of search budget and branch policy.</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<ul><li><strong>只扩展最高均值分支：</strong>能提高模拟分数，却可能剪掉罕见、严重且已知的失败路径。</li><li><strong>ensemble 一致就代表安全：</strong>多个模型可共享数据盲区；明确故障注入仍必要。</li><li><strong>模拟器全胜等于线上可用：</strong>模拟器不含的竞争、权限与 UI 漂移不会被测出。</li><li><strong>shadow 计划算任务成功：</strong>未执行的替代动作没有真实终态，不能进 success 分母。</li><li><strong>历史日志能给所有反事实答案：</strong>行为策略若从未选某动作，重要性权重无法估它的后果。</li><li><strong>更多搜索总是更好：</strong>可能只让 planner 更会利用模型漏洞，并吞掉真实核验预算。</li><li><strong>高分路径可越过 broker：</strong>无论分数，权限、当前前提和外部 verifier 都必须独立执行。</li></ul><p>最合适的 planner 不一定最深或最宽。稳定可模拟、动作昂贵时，多搜索可能值得；变化快、观察便宜或不可逆工具多时，反应式闭环常更稳。比较要看闭环真实结果，而非谁在自己构造的树里得分更高。</p>",
+        "en": "<ul><li><strong>Expand only the highest-mean branch:</strong> simulated value rises while a known rare severe failure disappears.</li><li><strong>Ensemble agreement proves safety:</strong> several models can share a data blind spot. Explicit fault injection remains necessary.</li><li><strong>Winning in a simulator proves production readiness:</strong> unmodeled competition, permission changes, and UI drift remain invisible.</li><li><strong>Count shadow plans as successes:</strong> an unexecuted alternate action has no real terminal outcome and cannot enter the success denominator.</li><li><strong>Logs contain every counterfactual:</strong> if the behavior policy never took an action, importance weights cannot reveal its effect.</li><li><strong>More search always helps:</strong> it may exploit model flaws more efficiently and consume the verification budget.</li><li><strong>A high-scoring path bypasses the broker:</strong> authority, fresh preconditions, and an external verifier remain independent regardless of score.</li></ul><p>The right planner is not necessarily deepest or widest. More search may pay in stable, simulatable settings with expensive actions. A reactive closed loop often fares better when the world changes quickly, observations are cheap, or irreversible tools abound. Compare real closed-loop outcomes, not which system scores higher in a tree it constructed itself.</p>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可复用的技术判断",
+        "en": "Reusable technical judgments"
+      },
+      "html": {
+        "zh": "<ul><li>搜索预算先覆盖合理 root action 与关键高损失分支，再追逐高均值路径。</li><li>剪枝要记录理由；模型分歧可提示风险，模型一致不能证明安全。</li><li>模拟评分、broker 授权与外部终态 verifier 是三层不同裁决。</li><li>离线日志缺未执行动作的反事实；没有支持与 propensity 就不要声称已验证新 policy。</li><li>相同权限/任务下比较反应式 baseline 与 planner，以安全 verified outcome、尾延迟和成本决定发布。</li></ul>",
+        "en": "<ul><li>Spend search budget on plausible root actions and critical high-loss branches before chasing mean-value paths.</li><li>Record pruning reasons. Model disagreement can warn; model agreement cannot certify safety.</li><li>Simulated scores, broker authority, and external terminal verification are distinct judgments.</li><li>Logs lack counterfactuals for unexecuted actions. Without support and propensities, do not claim a new policy is verified offline.</li><li>Compare planner and reactive baseline under equal permissions and tasks, releasing on safe verified outcomes, tails, and cost.</li></ul>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "一手资料与证据等级",
+        "en": "Primary sources and evidence tiers"
+      },
+      "html": {
+        "zh": "<ul class='source-list'><li><a href='https://arxiv.org/abs/1911.08265'>MuZero</a> — 作者报告在游戏等设置中以学到的模型与搜索选动作；不含企业工具权限保证。</li><li><a href='https://arxiv.org/abs/1906.08253'>When to Trust Your Model / MBPO</a> — 作者研究模型偏差与短 rollout 的取舍；数值结果属其环境。</li><li><a href='https://arxiv.org/abs/1805.12114'>PETS</a> — 作者研究概率动力学模型及采样控制；模型分歧不是业务安全认证。</li><li><a href='https://arxiv.org/abs/2006.04779'>Conservative Q-Learning</a> — 作者研究离线数据分布外动作带来的值估计问题；不直接评价本 Agent。</li><li><a href='https://arxiv.org/abs/1103.4601'>Doubly Robust Policy Evaluation and Learning</a> — 作者研究在特定假设下的离线策略评估；缺支持的动作仍无真实结果。</li></ul><p>链接和标题已于 2026-11-04 核验。预算 ledger、关键分支 coverage、强制 sentinel 与发布门为本文编辑性工程设计；不声称这些论文定义同一 Agent runtime 或验证了某个生产 planner。</p>",
+        "en": "<ul class='source-list'><li><a href='https://arxiv.org/abs/1911.08265'>MuZero</a> — the authors report learned-model search in games and other studied settings, not enterprise-tool authority guarantees.</li><li><a href='https://arxiv.org/abs/1906.08253'>When to Trust Your Model / MBPO</a> — the authors study model bias and short-rollout trade-offs; numerical results belong to their environments.</li><li><a href='https://arxiv.org/abs/1805.12114'>PETS</a> — the authors study probabilistic dynamics and sampled control; model disagreement is not a business-safety certificate.</li><li><a href='https://arxiv.org/abs/2006.04779'>Conservative Q-Learning</a> — the authors study value errors for actions outside an offline dataset, not this agent directly.</li><li><a href='https://arxiv.org/abs/1103.4601'>Doubly Robust Policy Evaluation and Learning</a> — the authors study offline policy evaluation under assumptions; unsupported actions still lack real outcomes.</li></ul><p>Links and titles were checked on 2026-11-04. Budget ledgers, critical-branch coverage, mandatory sentinels, and release gates are editorial engineering designs. The papers do not prescribe one shared agent runtime or validate a production planner.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "两篇综合与下一段路线",
+        "en": "Series synthesis and the next path"
+      },
+      "html": {
+        "zh": "<p><strong>本系列已讲完：</strong>1/2 从有来源的 belief 出发，以模型 rollout 展开可能路径；H 增大可看见远期影响，也让分支计算和模型偏差扩大。预测节点不能进入事实层，broker 只执行获授权第一步，真实观察后重定根。2/2 在有限预算下分配搜索、保留关键高损失分支、记录剪枝、让独立 broker/verifier 裁决，并承认日志没有未执行动作的反事实。完整链路是‘当前 belief → 有权限的候选 → 有预算且覆盖风险的搜索 → 第一步授权执行 → 权威核验 → 观察并重规划’。</p><p><strong>仍需持续验证：</strong>world model、业务规则和环境流量会变；模拟器覆盖有限，shadow 没有替代动作的真实结果，canary 也不能证明所有未来场景安全。每次模型、工具 schema 或权限更新都应重测关键分支与闭环效果。</p><p><strong>下一篇起点：</strong>系统主线可进入 hierarchical planning 与 temporal abstraction：一个‘子目标’如何展开为受控执行单元、何时中断或回滚，而不把模型想象当成持久工作流。</p>",
+        "en": "<p><strong>This series is complete:</strong> Part 1 started from a sourced belief and used model rollouts to branch over possible paths. Larger H exposes distant effects while growing compute and model bias. Predicted nodes cannot enter the fact layer; the broker executes only the authorized first action and re-roots after real observation. Part 2 allocates finite search, preserves critical high-loss branches, records pruning, relies on independent broker and verifier judgments, and admits that logs lack counterfactual outcomes for unexecuted actions. The full chain is current belief → permitted candidates → budgeted search with risk coverage → authorized first action → authoritative verification → observation and replanning.</p><p><strong>Continuing limitation:</strong> world models, business rules, and traffic drift. Simulators cover only what they model; shadow policies have no real outcome for alternate actions; canaries cannot prove every future case safe. Model, tool-schema, or authority changes require renewed critical-branch and closed-loop tests.</p><p><strong>Next starting point:</strong> the systematic path can enter hierarchical planning and temporal abstraction: how a subgoal becomes a controlled execution unit, when it may be interrupted or rolled back, and why imagined plans are not durable workflows.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "complete"
+  }
+}
