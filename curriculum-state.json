@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-11-05",
-  "latestIssueDate": "2026-11-05",
+  "generatedAt": "2026-11-06",
+  "latestIssueDate": "2026-11-06",
   "completedTopics": [
+    "hierarchical-option-composition-interruption-evaluation",
     "model-based-planning-search-budget-risk-evaluation",
     "world-state-active-sensing-value-of-information-action-gates",
     "realtime-multimodal-conflict-attribution-tool-commit",
@@ -20,6 +21,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "hierarchical-agent-control-internals",
     "agent-model-based-planning-internals",
     "agent-world-state-belief-tracking",
     "realtime-multimodal-coordination",
@@ -38,6 +40,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-06",
+      "topicId": "hierarchical-option-composition-interruption-evaluation",
+      "seriesId": "hierarchical-agent-control-internals",
+      "part": 2,
+      "complete": true
+    },
     {
       "date": "2026-11-05",
       "topicId": "hierarchical-planning-options-subgoal-contracts",
@@ -403,26 +412,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "hierarchical-agent-control-internals",
-    "nextPart": 2,
-    "established": {
-      "zh": [
-        "option 由启动集合 I、内部策略 π、终止规则 β 构成，是时间扩展动作，不等于单个 tool call",
-        "业务 runtime 需补 initiation guard、最小子工具权限、预算、取消与 typed outcome",
-        "option 停止不等于成功；成功需权威后置条件与无未决副作用 U=0",
-        "skill 包、option 与 durable workflow 可组合但职责和授权边界不同"
-      ],
-      "en": [
-        "An option has initiation set I, internal policy π, and termination rule β; it is a temporally extended action, not one tool call",
-        "A business runtime adds initiation guards, least child-tool authority, budgets, cancellation, and typed outcomes",
-        "Option termination is not success; success needs authoritative postconditions and zero unresolved effects U=0",
-        "Skill packages, options, and durable workflows may compose but have distinct responsibilities and authority boundaries"
-      ]
-    },
-    "next": {
-      "zh": "Hierarchical Agent Control Internals 2/2：从 option 结果合同进入组合图、依赖/中断传播、动态重分解、层级评测与安全发布门。",
-      "en": "Hierarchical Agent Control Internals 2/2: start from typed option results and cover composition graphs, dependency and interruption propagation, dynamic redecomposition, hierarchical evaluation, and safety release gates."
-    }
-  }
+  "pendingSeries": null
 }

@@ -150,6 +150,17 @@ test("generated styles wrap long inline equations on narrow screens", async () =
   }
 });
 
+test("generated styles keep code blocks readable on the dark pre background", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "deep-dive-code-contrast-"));
+  try {
+    await generateArchive({ outputDirectory: directory, issues: [fixture()] });
+    const styles = await readFile(join(directory, "assets", "styles.css"), "utf8");
+    assert.match(styles, /\.section-copy pre code\s*\{[^}]*background:\s*transparent[^}]*color:\s*inherit/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("generated pages declare a favicon without a network request", async () => {
   const directory = await mkdtemp(join(tmpdir(), "deep-dive-favicon-"));
   try {
