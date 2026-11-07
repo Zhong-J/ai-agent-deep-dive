@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-06",
-  "latestIssueDate": "2026-11-06",
+  "generatedAt": "2026-11-07",
+  "latestIssueDate": "2026-11-07",
   "completedTopics": [
     "hierarchical-option-composition-interruption-evaluation",
     "model-based-planning-search-budget-risk-evaluation",
@@ -40,6 +40,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-07",
+      "topicId": "multi-agent-delegation-evidence-independence",
+      "seriesId": "multi-agent-evidence-coordination-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-11-06",
       "topicId": "hierarchical-option-composition-interruption-evaluation",
@@ -412,5 +419,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "multi-agent-evidence-coordination-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "多执行者任务从可反驳主张和证据问题分派，不按 persona 数量分派",
+        "worker 合同包含来源、覆盖、反例、权限、预算和 typed outcome；查不到不等于未发现",
+        "公共 brief 可共享，可诱导答案的中间结论需延迟共享；安全控制事件立即传播",
+        "按当前证据缺口与边际净价值条件分派，相关错误会降低有效独立信息量"
+      ],
+      "en": [
+        "Multi-executor work is assigned by falsifiable claims and evidence questions, not persona count",
+        "Worker contracts include sources, coverage, counterexamples, authority, budget, and typed outcomes; unavailable is not negative evidence",
+        "A common brief may be shared while potentially anchoring conclusions are delayed; safety-control events propagate immediately",
+        "Delegate conditionally by current evidence gaps and marginal net value; correlated errors reduce effective independent information"
+      ]
+    },
+    "next": {
+      "zh": "Multi-Agent Evidence Coordination Internals 2/2：从三份 evidence packet 构造 claim graph，处理同源去重、时间/实体对齐、冲突裁决、人工升级与端到端评测。",
+      "en": "Multi-Agent Evidence Coordination Internals 2/2: build a claim graph from three evidence packets, deduplicate common sources, align time and entities, adjudicate conflicts, escalate to humans, and evaluate end to end."
+    }
+  }
 }
