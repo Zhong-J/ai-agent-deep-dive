@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>三个 Agent 的证据互相矛盾，谁能下结论？ · AI Agent Deep Dive</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body class="issue-page">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><i></i><span>AI Agent<br><b>Deep Dive</b></span></a>
+    <div class="language-switch" role="group" aria-label="Language">
+      <button type="button" data-set-language="zh" aria-pressed="true">中文</button>
+      <button type="button" data-set-language="en" aria-pressed="false">English</button>
+    </div>
+  </header>
+  <main>
+    <article class="lesson" data-language="zh">
+      <p class="kicker">Multi-Agent Evidence Coordination Internals · 第 2/2 篇</p>
+      <h1>三个 Agent 的证据互相矛盾，谁能下结论？</h1>
+      <p class="dek">把 worker 结果转成可审计的 claim graph：同源去重、时间与实体对齐、支持与反证边、弃权和人工升级。多数意见只是线索，不是事实提交协议。</p>
+      <div class="issue-meta"><span>2026-11-08</span><span>约 20 分钟</span><span>Multi-agent / Evidence fusion / Provenance / Conflict adjudication / Verification</span></div>
+
+      <section class="lesson-section" id="proposition-zh" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>今日命题</h2></header>
+        <div class="section-copy"><p>昨天，parent 按证据问题分派了日志、配置审计和用户影响三条路线，避免把同一 prompt 发给三个“研究员”。现在三份 evidence packet 回来了。日志 worker 报告“09:58 开始有错误”；审计 worker 报告“配置 X 在 10:03 推到 R2”；影响 worker 报告“10:05 起 R2 用户失败率上升”。这些都是<strong>假设案例数据</strong>。它们能否支持“配置 X 导致故障”？若两个 worker 都引用同一日志事件，是否能算两票？若时间戳来自事件发生时间与入库时间，表面冲突可能只是测量坐标不同。</p>
+      <p>本篇的命题是：<strong>协调器必须先把结果变成有来源、范围和时间语义的原子主张图，再对每条主张作可审计裁决。</strong>worker 的“我认为”不是事实；多数票不是合并算法；缺失来源不是反证。裁决者可以要求定向补证、返回 partial 或 inconclusive，并在高影响行动前交给有权限的人。</p>
+      <p>这是 Multi-Agent Evidence Coordination Internals 的收尾篇。它不重讲昨天的边际分派成本，也不重讲 10 月 8 日的 lease、fencing 与共享状态提交。今天的边界是：worker 提交 evidence packet，系统形成候选 claim graph，独立 verifier 决定哪些结论可被发布，哪些必须保持未决。</p></div>
+      </section>
+      <section class="lesson-section" id="connection-zh" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>从分派合同到裁决合同</h2></header>
+        <div class="section-copy"><p>昨天的 worker 合同包含来源、覆盖、反例、权限、预算和 typed outcome。“查不到日志”不能变成“未发现异常”。今天把这些字段送进裁决层：每个 packet 必须携带 sourceRef、采集方式、查询参数、实体、时间窗、sourceVersion、已覆盖范围和未覆盖范围。parent 不把它们直接拼成一段流畅总结，而是先判断它们是否在回答同一个可检验问题。</p>
+      <p>W3C PROV 数据模型把 entity、activity 和 agent 的生成、使用与派生关系表示为来源链。它解决的是“这条记录从哪来、经历了什么”，不自动判定记录为真。FEVER 研究把事实核验组织为支持、反驳和信息不足的标签，提醒我们第三类不是失败后的默认否定。FActScore 把长文本拆成原子事实评估，说明“整段看着对”会掩盖局部错误；其论文报告的是特定评测设置，不是本系统的准确率保证。</p>
+      <p>从选人到裁决还有一个授权转换：worker 有权限读取某源，不等于它有权限宣布根因或执行回滚。判定权应落在独立 verifier 和业务 owner 的合同上。任何外部文档或工具输出里的指令都只能作为待核验数据；它不能把 claim graph 的边改成“已批准执行”。</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-zh" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>从三份证据包构造 Claim Graph</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 760 310' role='img' aria-labelledby='merge-zh-title merge-zh-desc'><title id='merge-zh-title'>从证据包到可审计的主张裁决</title><desc id='merge-zh-desc'>日志、配置审计与用户影响三份证据包先统一实体、时间窗和来源血缘。重复引用同一事件合并为一条独立证据。标准化观察连接支持、反驳或限定的原子主张；裁决门可接受、拒绝、追问或弃权，不能由多数投票直接写入结论。</desc><rect x='14' y='22' width='174' height='77' rx='8' fill='#20312a'/><rect x='14' y='116' width='174' height='77' rx='8' fill='#20312a'/><rect x='14' y='210' width='174' height='77' rx='8' fill='#20312a'/><rect x='233' y='103' width='172' height='104' rx='8' fill='#8e6935'/><rect x='446' y='103' width='142' height='104' rx='8' fill='#9f4939'/><rect x='626' y='103' width='119' height='104' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='51'>日志包 A</text><text x='27' y='78'>source · scope</text><text x='27' y='145'>审计包 B</text><text x='27' y='172'>source · scope</text><text x='27' y='239'>影响包 C</text><text x='27' y='266'>source · scope</text><text x='246' y='135'>对齐与去重</text><text x='246' y='165'>entity · time</text><text x='246' y='188'>lineage · coverage</text><text x='459' y='139'>原子主张图</text><text x='459' y='169'>+ / − / scope</text><text x='639' y='139'>裁决门</text><text x='639' y='169'>或弃权</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 61H210V131H233'/><path d='M188 155H233'/><path d='M188 249H210V178H233'/><path d='M405 155H446'/><path d='M588 155H626'/></g></svg><figcaption>原创示意：先去重和对齐，再连接主张，最后裁决。箭头表示证据关系，不代表模型意见自动升级为事实。手机可横向滑动。</figcaption></figure>
+      <h3>1. 先验包，再验结论</h3><p>入口对每个 packet 做 schema、权限、来源可访问性和完整性检查。sourceRef 必须指向可读回的原始事件或经授权的持久摘要；只给一句“日志证明了我”不能通过。查询参数和 sourceVersion 决定能否复现观察。worker 的解释属于 <em>claim</em>，日志行与审计记录属于 <em>evidence</em>，两者不能混在同一字段。若 packet 的来源过期、签名/摘要不符或超出 worker 权限，状态是 quarantined 或 invalid，而不是进入多数投票池。</p>
+      <h3>2. 对齐实体和时间，保留不确定区间</h3><p>先把“R2”“第二环”和部署系统里的 ring ID 映射到同一实体；再区分 event time、系统接收时间和查询返回时间。日志的 09:58 若是客户端时钟，审计的 10:03 若是服务端提交时间，不能直接比较先后。把已知时钟偏差、采样延迟和部署传播窗口表示为区间；若区间重叠，就不能声称“错误严格早于配置”。同样，用户影响 10:05 才开始采样，并不证明 10:05 前无人受影响。时间规范化产生一条 observation，原始时间戳仍保留可追溯。</p>
+      <h3>3. 根据来源血缘去重，不按 worker 数计票</h3><p>两名 worker 若从同一 dashboard 的缓存图复制“失败率 12%”，即使措辞不同，也只有一条底层观测。用原始事件 ID、查询哈希、数据集版本、派生关系和采集活动 ID 建 provenance graph；将同一 lineage 的重复引用合并，保留两份解释作为不同主张。独立的日志与用户遥测也可能来自同一上游采集器；血缘不清时标为 dependence_unknown，不能假设独立。去重不会删掉资料：它只阻止同一事实被计算两次。</p>
+      <h3>4. 把长结论拆为有范围的原子主张</h3><p>“配置 X 导致 R2 全体用户 10:00 后搜索失败”至少包含：X 在 R2 生效、R2 失败率上升、上升早晚与 X 有序关系、其他原因未更好解释、影响范围确为全体。每个子主张带 predicate、entity、时间区间、量词和必要证据类型。Packet A 的 09:58 日志若经校时后确实早于 X 生效，可反驳“X 是首次错误的唯一触发因素”，但未必反驳“X 放大了已有故障”。Packet C 的 10:05 用户失败率只支持某观测窗口内的影响，不支持全体用户。图的边可标 support、refute、qualify、same_source、out_of_scope；自然语言摘要不自动升格为这些边。</p>
+      <h3>5. 将冲突分型后定向追问</h3><p>真正冲突要求同一实体、可比较时间窗、同一谓词及不兼容取值。“10:03 X 已生效”与“10:03 X 未生效”若源版本一致才冲突。不同 ring、不同采样口径、版本漂移或一个只看失败请求、一个看所有请求，属于 scope/measurement mismatch，须先对齐。若冲突来自权威源本身，就记录 source dispute 并交数据 owner；若来自解释，则让 verifier 查看原始记录和反例。追加 worker 应针对缺口，例如取部署系统的逐机器生效时间，而不是让第四人泛读已有三份总结。</p>
+      <h3>6. 裁决与发布门分开</h3><p>verifier 对每个原子主张返回 supported_verified、refuted_verified、inconclusive 或 out_of_scope，并附证据 ID、覆盖及理由。整句“X 是根因”只有在必要子主张均通过且关键反证已处置时才能发布；否则报告“X 与影响同窗，但因 09:58 错误和时间语义未核实，不能确定它是起因”。若结论将触发回滚、客户公告或权限变更，还需业务授权与独立检查；证据裁决本身不授予行动权限。未决状态可安全地交人工，并明确需要读哪个源、谁有访问权以及下一次检查何时进行。</p>
+      <pre><code>for packet in submitted_packets:
+  validate_source_and_scope(packet)
+  observations += normalize_entity_time(packet)
+unique_observations = dedupe_by_lineage(observations)
+graph = link_atomic_claims(unique_observations)
+for claim in graph.required_claims:
+  if comparable_contradiction(claim): request_targeted_evidence(claim)
+  else: verdict[claim] = verify_claim(claim, graph)
+publish_only_if(required_verdicts_pass and authority_gate_passes)
+</code></pre>
+      <p>这段伪代码和四态 verdict 是编辑性工程设计；W3C PROV、FEVER 与 FActScore 没有共同定义这样的 Agent 协议。</p></div>
+      </section>
+      <section class="lesson-section" id="mathematics-zh" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>哪些证据可组合？</h2></header>
+        <div class="section-copy"><p>第一道门是可比较性。令 e₁、e₂ 为两条观察，定义谓词 P、实体 S、时间区间 T、测量口径 M。真正的矛盾需要：</p><div class='equation'>Conflict(e₁,e₂) = SameP ∧ SameS ∧ Overlap(T₁,T₂) ∧ ComparableM ∧ IncompatibleValue</div><p>SameP 表示回答同一原子谓词；SameS 是同一实体；Overlap 要求时间区间有交集；ComparableM 表示单位、分母、采样和版本可比；IncompatibleValue 才是互斥取值。任何条件未知，状态应是“不足以判定冲突”，不是强行选一边。工程意义：先修复 entity/time/schema 对齐，再让 LLM 解释原因。</p>
+      <p>第二道门是独立性。若 H 为“X 是起因”，eA、eB 是证据，贝叶斯赔率在<strong>条件独立且似然可信</strong>时可写为：</p><div class='equation'>Odds(H | eA,eB) = Odds(H) × LR(eA) × LR(eB)</div><p>Odds(H)=P(H)/[1−P(H)] 是先验赔率；LR(e)=P(e|H)/P(e|非H) 是证据在两种假设下出现的相对可能性。式子说明为什么独立证据能累积，但也展示了危险：若 eA 和 eB 其实来自同一日志行，直接相乘就是重复计算，虚增确信。真实 Agent 很少拥有校准可靠的 LR；不要让模型临时编数字。实际可按来源血缘分组、保留定性支持/反驳，并由独立 verifier 裁决。数学在这里提供的是<strong>不得把相关观测当独立样本</strong>的设计约束。</p>
+      <p>最后，证据充分性是目标相关的。确认“有 R2 用户受影响”可能只需可信的覆盖样本；确认“X 是唯一根因”需要更强的时间、机制和反例排除。不同主张的 required evidence set 应由业务合同预先声明，不能在看到结果后随意降低门槛。</p></div>
+      </section>
+      <section class="lesson-section" id="implications-zh" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>对 Agent 系统的影响</h2></header>
+        <div class="section-copy"><h3>能力与延迟</h3><p>Claim graph 让协调器能定向补证：缺的是逐机器配置生效时间，就只发那个查询；不是再生成五段互相辩论。它增加规范化和 verifier 成本，却避免在错误来源上无限 fan-out。对实时故障，可先发布有范围的已核验事实与明确未决项，再在后续更新中收敛根因；不必为了“完整故事”拖延所有已知事实。</p>
+      <h3>可观察性与权限</h3><p>trace 应连接 final sentence → atomic claim → verdict → evidence IDs → source activity/version/coverage。审计时可以问：为何说“所有用户”？哪个样本覆盖了“所有”？若答案不存在，就不能保留该量词。读权限、归因发布权限和执行修复权限是三道不同门；worker 的 prompt 或来源页面都不能跨过它们。</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-zh" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>取舍、评测与发布门</h2></header>
+        <div class="section-copy"><p><strong>去重过度与不足：</strong>同一 dashboard 的两条查询可能共享原始事件，但覆盖不同时间窗，不能简单删一条；两份表面不同的截图又可能只是同一缓存，不能算独立。保留 provenance graph 与 coverage，按底层 lineage 和主张用途去重。血缘不可得时标 dependence_unknown，阻止系统把数量包装成确信。</p>
+      <p><strong>权威与时效：</strong>配置审计在“何时提交”上可能最权威，日志在“何时出错”上更直接；没有一个源对所有谓词都有最高等级。权威表应按 claim type 规定，而非全局排行榜。过期但可复现的权威记录、较新但采样偏斜的 telemetry、人工口述各有边界。裁决不能只选最近或最正式的文件。</p>
+      <p><strong>自动化与人类：</strong>当证据可比且一方明显被反证，自动 verdict 可节省时间；当涉及客户公告、回滚或法务风险，或者权威源自身冲突，应暂停终态归因并交 owner。人工升级要带可读的冲突集和查询路径，不能把三份长聊天记录抛给人重新调查。无法裁决时的 abstain 是有信息的输出，不是系统“失败”掩饰。</p>
+      <p><strong>层级评测：</strong>packet 层检验 sourceRef 可读回、覆盖字段和无法访问状态；graph 层检验同源去重、时间/实体对齐、限定量词和冲突分型；end-to-end 层检验错误归因率、过度自信率、未决但应升级率、已核验事实发布时间及人工负担。故障注入要包括时钟偏移、迟到 telemetry、同一源被多名 worker 引用、不同 ring 混淆、被污染文档，以及正确答案确实是 inconclusive 的案例。只考察“最终文本看起来合理”不能验证证据协议。</p>
+      <p><strong>发布门：</strong>对外报告必须列出 confirmed、contested、unknown 与下一步来源；每个确定句有可追溯证据且量词不超出覆盖；高影响动作需独立授权与效果核验。回滚部署无法撤回已发公告，因此在输出与行动之间保留显式审批门。以上门槛是本文编辑性工程建议，不是引用论文或 W3C 规范规定的统一 Agent 标准。</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-zh" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>可以带走的判断</h2></header>
+        <div class="section-copy"><ol><li>先验 packet 的来源、范围和版本，再讨论 worker 的自然语言结论。</li><li>同源多次引用只有一条底层观测；缺失、不同覆盖和真正冲突分别处理。</li><li>长结论拆成原子主张，按实体、时间、口径与反证边裁决，量词不得超出覆盖。</li><li>证据不足时明确弃权和定向补证；事实发布与高影响行动各有独立授权门。</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-zh" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>来源与证据边界</h2></header>
+        <div class="section-copy"><ul class='source-list'><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> 与 <a href='https://www.w3.org/TR/prov-o/'>PROV-O</a> — 官方来源模型与本体，定义 entity/activity/agent 及派生关系；不判断主张真假。</li><li><a href='https://arxiv.org/abs/1803.05355'>Thorne et al., FEVER</a> — 作者提出支持、反驳、信息不足的事实核验数据集；标签结构启发本文四态裁决，但业务合同是编辑设计。</li><li><a href='https://arxiv.org/abs/2305.14251'>Min et al., FActScore</a> — 作者提出长文本原子事实评估并报告实验；不等于本文的实时根因验证器。</li><li><a href='https://beam.apache.org/documentation/programming-guide/#watermarks-and-late-data'>Apache Beam Programming Guide</a> — 官方文档区分 event time、processing time 与迟到数据；这里只借其时间语义，不声称本案例使用 Beam。</li><li><a href='https://arxiv.org/abs/2210.08726'>Gao et al., RARR</a> — 作者研究检索证据并修订模型文本；其自动修订结果不能替代本文的授权发布门。</li></ul><p>链接和标题已于 2026-11-08 核验。Claim graph、去重规则、四态 verdict、人工升级与发布门为编辑性工程综合；案例中的时间和 ring 均为假设数据。</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-zh" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>专题收束与下一站</h2></header>
+        <div class="section-copy"><p><strong>本专题已讲完：</strong>1/2 说明按可反驳主张与独立证据路线分派，而不是堆 persona；worker 合同明确来源、覆盖、权限和反例，调度器按边际价值条件加人。2/2 说明 packet 如何通过来源与时间对齐、同源去重进入 claim graph，再由 verifier 对原子主张作支持、反驳、未决或不适用裁决。对外发布和实际动作还有独立授权门。核心原则是：执行者可以并行，事实不能靠人数表决。</p><p><strong>尚未讲完：</strong>本专题的分派与裁决链已闭合。更广课程中的组织级知识共享、长期信任校准和跨机构协议值得另起专题，不把它们算作未完成第三篇。</p><p><strong>下一篇起点：</strong>回到 Agent 系统路线，进入另一个独立问题：当执行环境、数据权限和模型能力随时间变化，Agent 如何维持稳定的能力边界与可审计的升级路径？明天不续讲本专题。</p></div>
+      </section>
+    </article>
+    <article class="lesson" data-language="en" hidden>
+      <p class="kicker">Multi-Agent Evidence Coordination Internals · Part 2 of 2</p>
+      <h1>Three Agents Disagree: Who Can Issue the Verdict?</h1>
+      <p class="dek">Turn worker outputs into an auditable claim graph with source deduplication, temporal and entity alignment, support and rebuttal edges, abstention, and human escalation. Majority opinion is a clue, not a fact-commit protocol.</p>
+      <div class="issue-meta"><span>2026-11-08</span><span>20 min read</span><span>Multi-agent / Evidence fusion / Provenance / Conflict adjudication / Verification</span></div>
+
+      <section class="lesson-section" id="proposition-en" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>Today's proposition</h2></header>
+        <div class="section-copy"><p>Yesterday the parent delegated three distinct evidence questions: service logs, configuration audit, and user impact. It did not send one prompt to three “researchers.” Now three evidence packets arrive. A log worker reports “errors began at 09:58”; an audit worker reports “configuration X reached ring R2 at 10:03”; an impact worker reports “R2 user failures rose from 10:05.” These are <strong>hypothetical case data</strong>. Do they support “X caused the outage”? If two workers cite the same log event, are those two votes? If one timestamp is event time and another is ingestion time, an apparent contradiction may be a disagreement about coordinates rather than reality.</p>
+      <p>The proposition is that <strong>a coordinator must turn outputs into an atomic claim graph with provenance, scope, and time semantics before issuing auditable verdicts.</strong> A worker's “I think” is not a fact. Majority vote is not a merge algorithm. An inaccessible source is not rebuttal evidence. The adjudicator may ask for targeted evidence, return a partial or inconclusive result, or escalate to an authorized human before a consequential action.</p>
+      <p>This closes Multi-Agent Evidence Coordination Internals. We will not repeat yesterday's marginal-allocation objective or the October 8 treatment of leases, fencing, and shared-state commits. Today's boundary is specific: workers submit evidence packets, the system builds a candidate claim graph, and an independent verifier decides which conclusions may be published and which remain unresolved.</p></div>
+      </section>
+      <section class="lesson-section" id="connection-en" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>From delegation contracts to verdict contracts</h2></header>
+        <div class="section-copy"><p>Yesterday's worker contract included sources, coverage, counterexamples, authority, budget, and a typed outcome. “Could not read the logs” was distinct from “found no abnormality.” The adjudication layer consumes those fields. Each packet needs a source reference, collection method, query parameters, entity, time window, source version, covered scope, and uncovered scope. The parent should not simply concatenate the packets into a fluent summary. It first asks whether they answer the same testable question.</p>
+      <p>The W3C PROV data model represents the provenance of entities through activities and agents that generated, used, or derived them. It answers where a record came from and what happened to it; it does not certify truth. FEVER research formalized supported, refuted, and not-enough-information labels for fact verification, highlighting why the third category is not a default negative. FActScore decomposed long text into atomic factual claims for evaluation, showing why a paragraph that looks broadly right can hide local factual errors. Those are author-reported research results in specified evaluation settings, not accuracy guarantees for this system.</p>
+      <p>Moving from assignment to verdict also changes authority. A worker authorized to read a source is not necessarily authorized to pronounce a root cause or execute a rollback. Verdict authority belongs in an independent verifier and business-owner contract. Instructions embedded in an external document or tool output remain data to inspect; they cannot change a claim-graph edge into an approved action.</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-en" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>Build a claim graph from three evidence packets</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 760 310' role='img' aria-labelledby='merge-en-title merge-en-desc'><title id='merge-en-title'>From evidence packets to an auditable claim verdict</title><desc id='merge-en-desc'>Log, configuration-audit, and user-impact packets are aligned by entity, time window, and source lineage. Repeated citations of one event become one independent observation. Normalized observations support, refute, or qualify atomic claims. The verdict gate may accept, reject, investigate, or abstain; a majority vote cannot write the conclusion directly.</desc><rect x='14' y='22' width='174' height='77' rx='8' fill='#20312a'/><rect x='14' y='116' width='174' height='77' rx='8' fill='#20312a'/><rect x='14' y='210' width='174' height='77' rx='8' fill='#20312a'/><rect x='233' y='103' width='172' height='104' rx='8' fill='#8e6935'/><rect x='446' y='103' width='142' height='104' rx='8' fill='#9f4939'/><rect x='626' y='103' width='119' height='104' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='51'>Log packet A</text><text x='27' y='78'>source · scope</text><text x='27' y='145'>Audit packet B</text><text x='27' y='172'>source · scope</text><text x='27' y='239'>Impact packet C</text><text x='27' y='266'>source · scope</text><text x='246' y='135'>Align + dedupe</text><text x='246' y='165'>entity · time</text><text x='246' y='188'>lineage · coverage</text><text x='459' y='139'>Claim graph</text><text x='459' y='169'>+ / − / scope</text><text x='639' y='139'>Verdict</text><text x='639' y='169'>or abstain</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 61H210V131H233'/><path d='M188 155H233'/><path d='M188 249H210V178H233'/><path d='M405 155H446'/><path d='M588 155H626'/></g></svg><figcaption>Original explanatory illustration: deduplicate and align first, connect claims next, then decide. Arrows represent evidence relationships, not automatic promotion of model opinion to fact. Scroll horizontally on mobile.</figcaption></figure>
+      <h3>1. Validate packets before evaluating conclusions</h3><p>At ingress, check each packet's schema, authority, source accessibility, and integrity. A sourceRef must lead to a readable original event or an authorized durable extract; “the logs prove me right” is not a usable reference. Query parameters and sourceVersion determine whether the observation can be reproduced. A worker's interpretation is a <em>claim</em>; a log line or audit record is <em>evidence</em>. The two cannot occupy one undifferentiated field. If the source is stale, its signature or digest mismatches, or the worker accessed it outside its grant, mark the packet quarantined or invalid. It must not enter a voting pool.</p>
+      <h3>2. Align entity and time while retaining uncertainty intervals</h3><p>Map “R2,” “second ring,” and the deployment system's ring identifier to one entity before comparing observations. Then distinguish event time, system receipt time, and query return time. A log's 09:58 may be a client clock; an audit's 10:03 may be server commit time. Their order cannot be assumed. Represent known clock skew, sampling delay, and deployment propagation as intervals. If the intervals overlap, the system cannot claim that errors strictly preceded the configuration. Likewise, user-impact sampling that begins at 10:05 does not prove that no user was affected earlier. Normalization produces a comparable observation while retaining raw timestamps for traceability.</p>
+      <h3>3. Deduplicate by provenance, not worker count</h3><p>Two workers may copy “12% failure rate” from one cached dashboard graph. Their wording differs, but there is only one underlying observation. Build a provenance graph from original event ID, query digest, dataset version, derivation relationships, and collection activity ID. Merge repeated citations from one lineage while retaining the two interpretations as separate claims. Even service logs and user telemetry may share one upstream collector. If lineage is unknown, mark dependence_unknown rather than assume independence. Deduplication does not delete evidence; it prevents counting the same observation twice.</p>
+      <h3>4. Split a long conclusion into scoped atomic claims</h3><p>“Configuration X caused search failures for all R2 users after 10:00” bundles several claims: X took effect in R2; failure rate increased; the increase had a particular temporal relationship with X; alternatives do not better explain it; and the affected population was indeed all R2 users. Each child claim needs a predicate, entity, time interval, quantifier, and evidence type. If calibrated packet A logs show errors before X took effect, that may refute “X uniquely triggered the first error” without refuting “X amplified an existing incident.” Packet C's user-failure rate from 10:05 supports an effect only inside its measured window, not an all-users claim. Graph edges can mean support, refute, qualify, same_source, or out_of_scope; a fluent summary does not automatically create those edges.</p>
+      <h3>5. Classify conflicts before asking for more work</h3><p>A genuine contradiction requires the same entity, comparable time scope, the same predicate, and incompatible values. “X active in R2 at 10:03” and “X not active in R2 at 10:03” conflict only if their source versions are comparable. Different rings, sampling definitions, version drift, or one dataset counting only failed requests while another counts all requests are scope or measurement mismatches requiring alignment first. A conflict inside an authoritative source becomes a source dispute for its data owner; a conflict in interpretation calls for a verifier to inspect originals and counterexamples. An additional worker should target the missing fact, perhaps per-machine activation time from the deployment system, rather than read the three existing summaries and issue a fourth opinion.</p>
+      <h3>6. Separate verdict from permission to publish or act</h3><p>The verifier returns supported_verified, refuted_verified, inconclusive, or out_of_scope for each atomic claim, with evidence IDs, coverage, and reasons. “X is the root cause” can be published only when required child claims pass and decisive rebuttals are addressed. Otherwise report, for example, “X overlaps the impact window, but an earlier 09:58 error and unresolved clock semantics prevent us from establishing it as the initial trigger.” If the conclusion would initiate a rollback, customer notice, or permission change, a business authority gate and independent check still apply. An evidence verdict cannot grant action authority. Unresolved status can be handed to a human safely by naming the missing source, its owner, and when it can next be checked.</p>
+      <pre><code>for packet in submitted_packets:
+  validate_source_and_scope(packet)
+  observations += normalize_entity_time(packet)
+unique_observations = dedupe_by_lineage(observations)
+graph = link_atomic_claims(unique_observations)
+for claim in graph.required_claims:
+  if comparable_contradiction(claim): request_targeted_evidence(claim)
+  else: verdict[claim] = verify_claim(claim, graph)
+publish_only_if(required_verdicts_pass and authority_gate_passes)
+</code></pre>
+      <p>The pseudocode and four-state verdict are editorial engineering design. W3C PROV, FEVER, and FActScore do not jointly define such an agent protocol.</p></div>
+      </section>
+      <section class="lesson-section" id="mathematics-en" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>Which evidence can be combined?</h2></header>
+        <div class="section-copy"><p>The first gate is comparability. Let e₁ and e₂ be observations with predicate P, entity S, time interval T, and measurement definition M. A real contradiction requires:</p><div class='equation'>Conflict(e₁,e₂) = SameP ∧ SameS ∧ Overlap(T₁,T₂) ∧ ComparableM ∧ IncompatibleValue</div><p>SameP means the observations answer the same atomic predicate; SameS means the same entity; Overlap requires intersecting time intervals; ComparableM requires comparable units, denominators, sampling rules, and source versions; IncompatibleValue means mutually exclusive values. If a condition is unknown, the result is “conflict cannot yet be determined,” not an arbitrary winner. The engineering order is to fix entity, time, and schema alignment before asking an LLM to explain causation.</p>
+      <p>The second gate is independence. Let H mean “X was the initial trigger,” with evidence eA and eB. Bayesian odds can be written as follows <strong>when evidence is conditionally independent and likelihoods are trustworthy</strong>:</p><div class='equation'>Odds(H | eA,eB) = Odds(H) × LR(eA) × LR(eB)</div><p>Odds(H)=P(H)/[1−P(H)] is prior odds. LR(e)=P(e|H)/P(e|not H) is how much more likely the evidence is under H than under its alternative. The equation explains how independent evidence can accumulate, but also the danger: if eA and eB are citations of the same log line, multiplying their likelihood ratios counts that event twice and inflates confidence. Real agents rarely have well-calibrated likelihood ratios. The model must not invent numbers on demand. A practical system groups evidence by lineage, retains qualitative support and rebuttal, and uses an independent verifier. The mathematics supplies a design constraint: <strong>correlated observations cannot be treated as independent samples.</strong></p>
+      <p>Finally, sufficiency depends on the decision. Establishing “some R2 users were affected” may require one trustworthy coverage sample. Claiming “X was the unique root cause” needs stronger temporal, mechanistic, and counterexample evidence. The required evidence set for each claim should be part of the business contract before results arrive; it should not be lowered after seeing a convenient answer.</p></div>
+      </section>
+      <section class="lesson-section" id="implications-en" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>Implications for agent systems</h2></header>
+        <div class="section-copy"><h3>Capability and latency</h3><p>A claim graph lets the coordinator request precisely the missing evidence. If the gap is per-machine configuration activation time, run that query rather than generate five more debate transcripts. Normalization and independent verification add cost, but they prevent unbounded fan-out against the wrong source. During an active incident, the system may publish scoped verified facts with explicit unresolved items, then update root-cause attribution later. A complete story need not delay every known fact.</p>
+      <h3>Observability and authority</h3><p>A useful trace links final sentence → atomic claim → verdict → evidence IDs → source activity, version, and coverage. An auditor can ask why a report says “all users” and which sample covered all of them. If no such sample exists, the quantifier must be weakened. Read access, authority to publish attribution, and permission to execute a repair are separate gates. Neither a worker prompt nor an instruction in a source page can cross them.</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-en" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>Trade-offs, evaluation, and release gates</h2></header>
+        <div class="section-copy"><p><strong>Over- and under-deduplication:</strong> two queries on one dashboard may share original events but cover different intervals, so one should not simply be deleted. Two different-looking screenshots may be of the same cache and cannot be counted as independent. Retain the provenance graph and coverage; deduplicate by underlying lineage in relation to the claim being tested. If lineage cannot be obtained, mark dependence_unknown and prevent the system from turning output count into confidence.</p>
+      <p><strong>Authority and freshness:</strong> a configuration audit may be authoritative for when a change was committed, while a service log may be more direct for when errors appeared. No source wins for every predicate. Define authority by claim type rather than a global ranking. An old but reproducible audit record, fresher but sampled telemetry, and a human statement each have boundaries. The adjudicator cannot choose solely by recency or document formality.</p>
+      <p><strong>Automation and humans:</strong> when evidence is comparable and one side is clearly refuted, an automated verdict can save time. If attribution affects a customer notice, rollback, or legal exposure, or if authoritative sources themselves disagree, defer terminal attribution to an owner. Escalation should include a readable conflict set and a query path. Dumping three long agent chats on a human is not a handoff. Abstention when evidence cannot decide is informative output, not failure disguised as certainty.</p>
+      <p><strong>Evaluate at three levels:</strong> packet tests check readable sourceRefs, coverage fields, and source-unavailable states. Graph tests check lineage deduplication, entity and time alignment, quantifier restrictions, and conflict classification. End-to-end tests measure false attribution, false confidence, missed escalation, time to publish verified facts, and human burden. Inject clock skew, late telemetry, shared sources cited by several workers, ring confusion, poisoned documents, and cases where the correct answer is genuinely inconclusive. A plausible final paragraph alone does not validate the evidence protocol.</p>
+      <p><strong>Release gate:</strong> an external report distinguishes confirmed, contested, unknown, and the next source to check. Every definitive sentence has traceable evidence and quantifiers within coverage. Consequential actions require separate authority and effect verification. Rolling back a deployment cannot unsend a customer notice, so an explicit approval gate belongs between output and action. These criteria are editorial engineering recommendations, not a universal agent standard in the cited papers or W3C specification.</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-en" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>Reusable judgments</h2></header>
+        <div class="section-copy"><ol><li>Validate a packet's source, scope, and version before considering a worker's natural-language conclusion.</li><li>Repeated citations of one source are one underlying observation. Missing evidence, differing coverage, and genuine contradictions need distinct handling.</li><li>Decompose a long conclusion into atomic claims; adjudicate by entity, time, measurement, and rebuttal. Never use a quantifier broader than coverage.</li><li>When evidence is insufficient, abstain and request a targeted check. Fact publication and consequential action have separate authority gates.</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-en" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>Sources and evidence boundaries</h2></header>
+        <div class="section-copy"><ul class='source-list'><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> and <a href='https://www.w3.org/TR/prov-o/'>PROV-O</a> — official provenance data model and ontology for entities, activities, agents, and derivation; neither establishes the truth of a claim.</li><li><a href='https://arxiv.org/abs/1803.05355'>Thorne et al., FEVER</a> — author research introducing a fact-verification dataset with supported, refuted, and not-enough-information labels. It informs but does not specify the four-state business verdict here.</li><li><a href='https://arxiv.org/abs/2305.14251'>Min et al., FActScore</a> — author research on evaluating atomic factual claims in long-form text; not a real-time root-cause verifier.</li><li><a href='https://beam.apache.org/documentation/programming-guide/#watermarks-and-late-data'>Apache Beam Programming Guide</a> — official documentation on event time, processing time, and late data. We borrow time semantics; the hypothetical case does not claim to use Beam.</li><li><a href='https://arxiv.org/abs/2210.08726'>Gao et al., RARR</a> — author research on researching and revising generated text with retrieved evidence; automated revision does not replace an authorization gate.</li></ul><p>Links and titles were checked on 2026-11-08. The claim graph, deduplication rules, four-state verdict, human escalation, and release gates are editorial engineering synthesis. All times and deployment rings in the case are hypothetical.</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-en" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>Series close and next stop</h2></header>
+        <div class="section-copy"><p><strong>Completed in this series:</strong> Part 1 assigned work by falsifiable claims and distinct evidence routes rather than accumulating personas. Worker contracts specified source, coverage, authority, and counterexamples, while the scheduler added workers conditionally by marginal value. Part 2 aligned packets by provenance and time, deduplicated common sources, built a claim graph, and had a verifier issue supported, refuted, inconclusive, or out-of-scope verdicts on atomic claims. Publication and real-world action retain separate authority gates. The combined principle is that executors may run in parallel, but facts cannot be established by headcount.</p><p><strong>Still open:</strong> the assignment-to-adjudication chain of this series is complete. Organization-wide knowledge sharing, long-run trust calibration, and inter-institutional protocols are broader curriculum topics, not a hidden third part.</p><p><strong>Next starting point:</strong> return to the systematic path with a separate question: as execution environments, data permissions, and model capabilities change over time, how should an agent maintain a stable capability boundary and an auditable escalation path? This series does not continue tomorrow.</p></div>
+      </section>
+    </article>
+    <nav class="issue-nav" aria-label="Issue navigation"><a href="2026-11-07.html"><span data-nav-language="zh">← 上一篇</span><span data-nav-language="en" hidden>← Previous</span><strong data-nav-language="zh">多派一个 Agent，什么时候真的多一份证据？</strong><strong data-nav-language="en" hidden>When Does Another Agent Actually Add Evidence?</strong></a><span></span></nav>
+  </main>
+  <script>
+(() => {
+  const switches = [...document.querySelectorAll("[data-set-language]")];
+  const lessons = [...document.querySelectorAll(".lesson[data-language]")];
+  function nearestSectionId() {
+    const visibleLesson = lessons.find((lesson) => !lesson.hidden);
+    if (!visibleLesson) return null;
+    const sections = [...visibleLesson.querySelectorAll("[data-section-id]")];
+    return sections.sort((a, b) => Math.abs(a.getBoundingClientRect().top - 100) - Math.abs(b.getBoundingClientRect().top - 100))[0]?.dataset.sectionId || null;
+  }
+  function setLanguage(language, preserveSection = false) {
+    if (!lessons.length) return;
+    const sectionId = preserveSection ? nearestSectionId() : null;
+    lessons.forEach((lesson) => { lesson.hidden = lesson.dataset.language !== language; });
+    document.querySelectorAll("[data-nav-language]").forEach((node) => { node.hidden = node.dataset.navLanguage !== language; });
+    switches.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.setLanguage === language)));
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    try { localStorage.setItem("ai-agent-deep-dive-language", language); } catch {}
+    if (sectionId) lessons.find((lesson) => lesson.dataset.language === language)?.querySelector('[data-section-id="' + sectionId + '"]')?.scrollIntoView({ block: "start" });
+  }
+  if (lessons.length) {
+    let stored = "zh";
+    try { stored = localStorage.getItem("ai-agent-deep-dive-language") || "zh"; } catch {}
+    setLanguage(stored === "en" ? "en" : "zh");
+    switches.forEach((button) => button.addEventListener("click", () => setLanguage(button.dataset.setLanguage, true)));
+  }
+  const search = document.querySelector("#archive-search");
+  if (search) search.addEventListener("input", () => {
+    const query = search.value.trim().toLowerCase();
+    const cards = [...document.querySelectorAll("[data-searchable]")];
+    let visible = 0;
+    cards.forEach((card) => { card.hidden = Boolean(query) && !card.dataset.searchable.includes(query); if (!card.hidden) visible += 1; });
+    const empty = document.querySelector(".empty-state");
+    if (empty) empty.hidden = visible !== 0;
+  });
+})();
+</script>
+</body>
+</html>
