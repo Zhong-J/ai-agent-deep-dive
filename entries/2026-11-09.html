@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>Agent 的计划还在，能力边界却变了：哪一步还能执行？ · AI Agent Deep Dive</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body class="issue-page">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><i></i><span>AI Agent<br><b>Deep Dive</b></span></a>
+    <div class="language-switch" role="group" aria-label="Language">
+      <button type="button" data-set-language="zh" aria-pressed="true">中文</button>
+      <button type="button" data-set-language="en" aria-pressed="false">English</button>
+    </div>
+  </header>
+  <main>
+    <article class="lesson" data-language="zh">
+      <p class="kicker">Dynamic Capability Boundaries Internals · 第 1/2 篇</p>
+      <h1>Agent 的计划还在，能力边界却变了：哪一步还能执行？</h1>
+      <p class="dek">把工具合同、授权、数据可见性、执行环境和模型版本视为随时间变化的能力状态。让计划保留来历，执行使用当前门，并把变化传播到真正受影响的步骤。</p>
+      <div class="issue-meta"><span>2026-11-09</span><span>约 20 分钟</span><span>Capability drift / Authorization / Tool contracts / Plan invalidation / Agent runtime</span></div>
+
+      <section class="lesson-section" id="proposition-zh" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>今日命题</h2></header>
+        <div class="section-copy"><p>一个 Agent 周一读到财务数据、生成了“核对发票 → 汇总 → 发送报告”的计划。周二继续时，读取权限已被撤销，工具 schema 新增必填字段，sandbox 换了镜像，路由器又把请求送给新版模型。计划文本仍在，是否意味着下一步还能执行？<strong>不能。</strong>计划描述的是当时可行的意图和路径，不是对未来资源、权限与模型质量的长期担保。</p>
+      <p>前文分别讲过 MCP catalog 变更、tool schema、dispatch-time 授权、durable workflow 和多 Agent 结果合同。今天把这些部件放到同一时间轴：<strong>能力边界是随时间变化的向量；每个待执行动作只绑定必要能力，在真正 dispatch 前按当前状态重验。</strong>变化有不同语义：新增只读工具不自动扩大授权；权限收窄必须阻断；工具参数变化可能要求重新绑定；模型版本替换改变质量预期，但不直接改变安全权限。</p>
+      <p>本文讨论计划与执行之间的“能力漂移”，不重复 9 月 26 日的 MCP tools/listChanged 协议流程，也不重写 10 月 3 日的 prompt injection 防线。重点是多个变化同时发生时，runtime 怎样保留可审计的计划来源、选择性失效、恢复或暂停，并在已发出副作用的边界如实报告。</p>
+      <div class='callout'><strong>核心规则：</strong>旧计划可作为提案和历史证据；当前权限、合同语义和环境条件决定可否行动。旧上下文里的一句“已获许可”不能越过新的执行门。</div></div>
+      </section>
+      <section class="lesson-section" id="connection-zh" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>把熟悉的 Agent 组件放在时间轴上</h2></header>
+        <div class="section-copy"><p>把一次执行拆成三个时刻。<em>计划时 t₀</em>，模型根据工具说明、可见数据与能力画像产生 action proposal；runtime 记录用于决策的 capability snapshot。<em>派发时 t₁</em>，broker 在当前身份与资源版本下校验规范化参数、权限和环境。<em>核验时 t₂</em>，真实系统的读回决定副作用是否完成。t₀ 的成功推理不能代替 t₁ 的许可，t₁ 的请求成功也不能代替 t₂ 的结果。</p>
+      <p>能力状态不等于一个工具名单。至少包括 tool identity 与语义合同版本、credential scope/有效性、数据集 entitlement、运行环境 image/网络与文件边界，以及用于该任务类型的模型质量画像。把这些放进同一对象，是为了判断一个动作依赖哪部分；并非要求所有平台采用同一种 API。模型版本是预测可靠性输入，不是 runtime 的 capability token。这个区别很重要：弱模型不能因为“权限更少”就被认为安全，强模型也不能因为“质量更高”而获得更多数据。</p>
+      <p>NIST Zero Trust Architecture 强调对资源访问按当前上下文作决策。OAuth revocation 与 introspection 规范提供令牌撤销和状态查询的协议语义，但具体系统是否实时发现撤权、多久传播，取决于实现。MCP 工具规范允许能力列表变化通知；它告知 catalog 变化，不代表 host 已批准新工具。本文据此做工程综合：snapshot 解释旧决定，live gate 决定新动作。</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-zh" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>能力变化怎样传播到计划</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 760 310' role='img' aria-labelledby='cap-zh-title cap-zh-desc'><title id='cap-zh-title'>计划与执行之间的能力变化门</title><desc id='cap-zh-desc'>Agent 在 C0 下形成计划。工具合同、授权、环境或模型发生变化后，runtime 根据变化影响到的节点做重验。兼容且获授权的节点继续；语义变化重绑定；权限撤销阻断；未知状态暂停并上报。已提交副作用进入核对账本。</desc><rect x='14' y='100' width='174' height='106' rx='8' fill='#20312a'/><rect x='236' y='100' width='170' height='106' rx='8' fill='#8e6935'/><rect x='456' y='100' width='170' height='106' rx='8' fill='#9f4939'/><rect x='664' y='100' width='82' height='106' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='136'>计划快照</text><text x='27' y='163'>C0 · intent</text><text x='27' y='187'>所需能力</text><text x='249' y='136'>变化事件</text><text x='249' y='163'>schema · auth</text><text x='249' y='187'>env · model</text><text x='469' y='136'>执行门</text><text x='469' y='163'>当前 C(t)</text><text x='469' y='187'>选择性重验</text><text x='675' y='125'>继续</text><text x='675' y='149'>重绑</text><text x='675' y='173'>阻断</text><text x='675' y='197'>暂停</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 153H236'/><path d='M406 153H456'/><path d='M626 153H664'/></g><text x='238' y='56' fill='#35433b' font-size='16' font-family='sans-serif'>变化不是对旧计划的追认</text><text x='196' y='260' fill='#35433b' font-size='15' font-family='sans-serif'>撤权 → 阻断；在途效果 → 核对</text></svg><figcaption>原创示意：能力快照保留计划来历，执行门使用当前能力状态；四类变化导致继续、重绑定、阻断或暂停。箭头不表示旧授权自动延续。手机可横向滑动。</figcaption></figure>
+      <h3>1. 保存的是依赖，而非一份永不过期的工具菜单</h3><p>每个 plan node 保存 typed intent、输入实体和版本、期望后置条件，以及 requirement set。例如“读发票”依赖 dataset D 的读权限、query 工具语义 v2、租户 T 的资源范围和某个可用沙箱；“发送报告”还依赖外发权限与收件人核验。计划时 snapshot 记录这些要求如何得到满足，供回放与审计。不要把整个 credential、秘密或原始工具结果复制进 snapshot；记录不可伪造的引用和摘要，敏感值仍由专门的权限系统管理。</p>
+      <h3>2. 将变化事件分类，而不是一律重跑</h3><p>工具消失、schema 新增必填字段、默认值语义改变、数据权限撤销、镜像升级、模型路由变更，这些事件影响不同节点。catalog 新增工具通常不使已有节点失效，也不自动授权 Agent 使用它。schema 的兼容新增可能只需验证；字段意义变化必须重新做参数绑定和评测。权限撤销则使受影响动作立即 blocked，不能用模型重新描述需求绕过。执行环境更换时，需要确认工具依赖、网络出口和文件挂载仍满足；镜像 digest 相同只能证明内容标识一致，不能证明外部服务也没变。</p>
+      <h3>3. 根据 requirement graph 选择性失效</h3><p>runtime 将变化键映射到依赖它的未执行节点，并沿数据/控制边传播。财务读权限撤销会使“读发票”无法启动，若后续摘要依赖这次新读，也必须暂停；但一份已核验、仍在有效期内且合同允许复用的历史聚合结果，不必机械删除。是否可复用由数据保留政策和任务目标决定，不能单凭文件仍在磁盘上。相比全局重规划，选择性失效保留不受影响的工作；相比无差别续跑，它阻断旧条件下才成立的节点。</p>
+      <h3>4. dispatch 门只接受当前可证明状态</h3><p>派发前，broker 用规范化参数和当前 principal 检查允许的资源、tool contract 与环境约束。若授权服务不可达，状态是 unknown/hold，不是“上次查过所以允许”；若权限被撤销，拒绝且审计原因。OAuth introspection 可提供某些令牌状态信号，但它本身不保证所有后端资源许可同步；高影响动作仍需资源侧强制校验。若新模型重写了参数，视为新 action proposal，重新过 schema、policy 和目标匹配门，而非继承旧提案的批准结果。</p>
+      <h3>5. 处理模型能力漂移，别把质量当权限</h3><p>模型 M1 到 M2 的替换可能改变工具选择、结构化输出通过率、长上下文利用和反例识别。它不会撤销或增加 credential，但可以使“这类任务允许自动执行”的质量门失效。对高风险节点，runtime 可固定已验证 model snapshot、路由到已评测替代、降级为只读/需审查，或暂停。HELM 的多维评测思想提醒我们不能用一个总分代表全部能力；具体门槛须来自本系统任务分布。不要把旧模型在历史样本上的表现当新版模型的生产证明。</p>
+      <h3>6. 已发出的动作只能核对，不能用撤权穿越时间</h3><p>若发送报告请求在 t₁ 已被接受，而 t₁ 之后权限撤销，runtime 停止新 dispatch，但不能宣称旧邮件已被撤回。记录 operation ID 和 effect owner，读回真实状态，必要时走补偿或人工处置。旧计划节点的晚到回调不得推进新版计划；它仍要进入 effect ledger。这里不重复 durable timer 实现，关键是把“以后不许做”与“过去已经做了什么”分开。</p>
+      <pre><code>on_change(change):
+  affected = pending_nodes_depending_on(change.keys)
+  invalidate_or_rebind(affected, change.kind)
+
+before_dispatch(node):
+  current = read_capability_state(node.requirements)
+  if current.unknown: return HOLD
+  if not authorized(node, current): return BLOCKED
+  if not compatible(node.contract, current): return REBIND
+  if not model_qualified(node.risk, current): return REVIEW
+  return dispatch_and_record_effect(node)
+</code></pre>
+      <p>以上状态与选择性失效算法是本文的编辑性工程设计；规范提供局部协议语义，并未共同规定一个跨 tool、identity、environment 和 model 的 Agent 控制器。</p></div>
+      </section>
+      <section class="lesson-section" id="mathematics-zh" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>当前能力门的最小形式</h2></header>
+        <div class="section-copy"><p>令 a 为待派发动作、t 为执行时刻。可执行性不是一个过去的布尔值，而是若干当前条件的合取：</p><div class='equation'>Ready(a,t) = Auth(a,t) ∧ ToolCompat(a,t) ∧ EnvReady(a,t) ∧ DataAllowed(a,t) ∧ ModelQualified(a,t)</div><p>Auth 是主体对具体资源与操作的授权；ToolCompat 是参数及语义合同相容；EnvReady 是运行环境满足安全和依赖条件；DataAllowed 是当前数据 entitlement 与用途许可；ModelQualified 是对这类任务和风险等级的质量门。它们由不同权威系统回答。任何一项为 false 就不能派发；unknown 也不能偷换成 true，而应 hold 或升级。对纯机械读操作，ModelQualified 可能由确定性代码满足；对模型生成的高风险写入，它必须有明确评测依据。此式是控制门的逻辑表达，并不声称所有系统恰有五个组件。</p>
+      <p>为避免每次小变化都全量重算，可把计划节点集合记为 V，变化触及的能力键集合记为 Δ，节点 v 的需求键为 Req(v)。受影响集合从交集开始，再沿真正依赖其结果的后继扩展：</p><div class='equation'>Affected(Δ) = Downstream({v ∈ V | Req(v) ∩ Δ ≠ ∅})</div><p>Downstream 包括起始节点自身及使用其输出的后继；不是所有时间上排在它之后的节点。例如模型版本变化只影响需要该模型质量门的未来节点，已完成的权威读取仍可保留；数据授权撤销可能连锁阻断依赖新读取的报告。工程上要给每个 node 明确 Req 和输出依赖，否则所谓“选择性”只是碰运气。</p></div>
+      </section>
+      <section class="lesson-section" id="implications-zh" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>对 Agent 系统的影响</h2></header>
+        <div class="section-copy"><h3>延迟与成本</h3><p>每次派发都做全域重发现会拖慢 Agent；只检查该节点的 Req 与近期变化可压低成本。但缓存权限状态有失效窗口，高影响写入不能靠久远缓存。可将低风险只读操作与高风险外发设置不同的重验频率和证据要求，仍须遵循资源侧强制边界。</p>
+      <h3>可靠性与可观察性</h3><p>trace 需要保存 plan snapshot ID、当前 capability state 版本、变化事件、受影响节点、门控结果、重绑定前后参数摘要及副作用状态。这样审计者可回答“为什么周二没有继续发报告”，也能区分服务不可用的 hold 与明确撤权的 block。Agent 用户界面应显示具体可恢复条件，而不是一句含糊的“工具出错”。</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-zh" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>取舍与失败模式</h2></header>
+        <div class="section-copy"><p><strong>Snapshot 与 live state：</strong>只保存 snapshot，回放可复现却可能沿用已撤销权限；只看 live state，今天能执行却难解释昨天为何作出不同计划。两者各有职责。snapshot 是证据和可重现上下文，live state 是当前许可与兼容性事实。</p>
+      <p><strong>严格冻结与弹性迁移：</strong>固定 tool/model/environment 版本可减小漂移，却可能因旧版本下线而停摆；自动迁移可以延续服务，却可能改变语义。兼容性必须按具体 action contract 判断，不按版本号大小猜测。缺少显式映射时，重绑定应形成新提案和新验证，而不是修改旧计划记录。</p>
+      <p><strong>撤权与失联：</strong>授权系统明确返回 revoked 是 block；超时或不可达是 unknown/hold。两者不能合并成“没有问题”。过于激进的 fail-open 可能越权，过于保守的 fail-closed 会降低可用性；对于读写敏感度不同的操作，合同可选择不同恢复路径，但不得让模型自己决定安全例外。</p>
+      <p><strong>评测：</strong>在同一任务轨迹中注入工具字段语义变化、权限撤销、数据集缩小、镜像网络策略变化、模型替换和迟到回调，观察是否只失效相关节点、是否阻断未授权动作、是否保留已提交效果的核对责任。指标应分为错误放行率、错误阻断率、重绑定成功率、恢复耗时、额外成本与审计完整度。只测单个工具的 schema 校验抓不到跨层漂移。</p>
+      <p>下一篇会具体处理请求更高权限或替代能力时的审批、证据包装、权限收窄、失效与回滚。这里先设底线：当当前条件无法证明成立，系统应暂停或提出可审查的升级请求，不应让 Agent 通过换说法、换工具名或换模型绕过边界。</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-zh" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>可以带走的判断</h2></header>
+        <div class="section-copy"><ol><li>计划快照保留来历，当前执行门决定是否行动；二者不可互相替代。</li><li>按节点需求传播能力变化：兼容继续，语义变化重绑定，撤权阻断，状态未知暂停。</li><li>模型版本变化影响质量画像，不直接增减工具权限；新工具出现也不自动授权。</li><li>已提交副作用须核对，不能靠撤权或改计划把过去抹去。</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-zh" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>来源与证据边界</h2></header>
+        <div class="section-copy"><ul class='source-list'><li><a href='https://csrc.nist.gov/pubs/sp/800/207/final'>NIST SP 800-207, Zero Trust Architecture</a> — 官方架构指导，支持按当前请求与上下文评估访问；不定义本文 Agent plan node API。</li><li><a href='https://datatracker.ietf.org/doc/html/rfc7009'>RFC 7009, OAuth 2.0 Token Revocation</a> 与 <a href='https://datatracker.ietf.org/doc/html/rfc7662'>RFC 7662, Token Introspection</a> — 标准协议语义；撤销传播和资源侧强制仍取决于具体实现。</li><li><a href='https://modelcontextprotocol.io/specification/2025-06-18/server/tools'>MCP Tools Specification</a> — 官方规范描述工具发现和 listChanged；catalog 更新不是 host 授权。</li><li><a href='https://github.com/opencontainers/image-spec/blob/main/descriptor.md'>OCI Image Spec: Descriptor</a> — 官方源码规范说明 digest 等描述符字段；固定镜像内容不固定外部服务。</li><li><a href='https://arxiv.org/abs/2211.09110'>Liang et al., HELM</a> — 作者研究多维语言模型评测；本文未把论文分数当作任何当前模型的生产门槛。</li></ul><p>链接和标题已于 2026-11-09 核验。能力向量、选择性失效、五条件执行门与恢复状态均为编辑性工程综合；没有宣称当前产品的实时行为。</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-zh" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>本专题的当前位置</h2></header>
+        <div class="section-copy"><p><strong>今天已建立：</strong>计划在 t₀ 的 capability snapshot 下形成；派发 t₁ 用当前授权、工具语义、环境、数据许可与模型质量门重验；核验 t₂ 用权威读回确认效果。每个节点声明 requirement set，变化沿依赖图选择性传播。新增能力不自动授权，撤权阻断，语义变化重绑定，未知状态暂停；已发出的动作进入核对账本。</p><p><strong>尚未讲完：</strong>当任务确实需要新权限或替代工具时，怎样让 Agent 提交可审查的升级请求而不自己批准？审批怎样绑定具体目标、资源、参数和期限？临时能力过期、审批后模型/环境再变化、人工否决及回滚怎样留下完整审计链？</p><p><strong>下一篇起点：</strong>Dynamic Capability Boundaries Internals 2/2 从 hold/rebind/escalate 的 typed outcome 出发，设计最小权限升级合同、人工批准、effect-bound 授权、到期撤销和变更注入评测。不重讲今天的能力向量与失效公式。</p></div>
+      </section>
+    </article>
+    <article class="lesson" data-language="en" hidden>
+      <p class="kicker">Dynamic Capability Boundaries Internals · Part 1 of 2</p>
+      <h1>The Plan Remains, but Capabilities Changed: What May Still Run?</h1>
+      <p class="dek">Treat tool contracts, authority, data visibility, execution environment, and model version as time-varying capability state. Preserve the plan’s provenance, check current conditions at execution, and invalidate only affected steps.</p>
+      <div class="issue-meta"><span>2026-11-09</span><span>20 min read</span><span>Capability drift / Authorization / Tool contracts / Plan invalidation / Agent runtime</span></div>
+
+      <section class="lesson-section" id="proposition-en" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>Today's proposition</h2></header>
+        <div class="section-copy"><p>An agent read finance data on Monday and planned “check invoices → summarize → send report.” On Tuesday its read grant has been revoked, the tool schema has acquired a required field, the sandbox image has changed, and a router sends the next request to a new model version. The plan text still exists. Does that mean its next step may run? <strong>No.</strong> A plan records an intention and a path believed feasible at planning time; it is not a lasting guarantee about resources, authority, or model quality.</p>
+      <p>Earlier issues separately covered MCP catalog changes, tool schemas, authorization at dispatch, durable workflows, and multi-agent result contracts. We now place those components on one timeline. <strong>The capability boundary is a time-varying vector; each pending action binds only the capabilities it requires and is checked against current state immediately before dispatch.</strong> Changes have different meanings. A newly advertised read-only tool does not automatically grant more authority. A narrowed grant blocks an action. A changed parameter contract may require rebinding. A model replacement changes expected quality, but it is not itself a security permission change.</p>
+      <p>This article examines capability drift between planning and execution. It does not repeat the September 26 MCP tools/listChanged protocol walk-through or the October 3 prompt-injection defenses. The question is how a runtime handles several simultaneous changes while preserving auditable plan provenance, selectively invalidating work, recovering or holding safely, and reporting any side effect that was already dispatched.</p>
+      <div class='callout'><strong>Rule:</strong> an old plan remains a proposal and historical record. Current authority, contract semantics, and environment conditions decide whether an action may happen. “Already authorized” in old context cannot bypass a new execution gate.</div></div>
+      </section>
+      <section class="lesson-section" id="connection-en" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>Put familiar agent components on a timeline</h2></header>
+        <div class="section-copy"><p>Separate one run into three moments. At <em>planning time t₀</em>, the model sees tool descriptions, visible data, and a capability profile, then proposes actions; the runtime records the capability snapshot behind that decision. At <em>dispatch time t₁</em>, the broker validates normalized arguments, authority, and environment under the current identity and resource versions. At <em>verification time t₂</em>, an authoritative readback decides whether the external effect completed. Good reasoning at t₀ cannot replace permission at t₁; a successful request at t₁ cannot replace an outcome at t₂.</p>
+      <p>Capability state is not merely a list of tool names. It includes a stable tool identity and semantic contract version, credential scope and validity, dataset entitlements, execution-image and network or file boundaries, and a model-quality profile for the task type. One combined view lets the runtime identify which parts an action depends on; it is not a demand that every platform adopt one API. A model version is an input to reliability prediction, not a runtime capability token. A weaker model is not safe merely because it has fewer permissions, and a stronger model does not earn more data access by scoring better.</p>
+      <p>NIST's Zero Trust Architecture motivates access decisions in current context. OAuth revocation and introspection specifications define protocol semantics for invalidating and inspecting tokens, but whether a given system detects revocation immediately and how quickly it propagates are implementation questions. The MCP tools specification permits change notifications for a tool list; it does not mean the host has approved every newly advertised tool. The engineering synthesis here is simple: the snapshot explains an old decision, while a live gate decides the next action.</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-en" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>How capability changes propagate into a plan</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 760 310' role='img' aria-labelledby='cap-en-title cap-en-desc'><title id='cap-en-title'>Capability-change gate between planning and execution</title><desc id='cap-en-desc'>The agent plans under C0. After a tool contract, authority, environment, or model change, the runtime revalidates affected nodes. Compatible authorized nodes continue; changed semantics require rebinding; revoked authority blocks; unknown state is held and escalated. Committed effects enter reconciliation.</desc><rect x='14' y='100' width='174' height='106' rx='8' fill='#20312a'/><rect x='236' y='100' width='170' height='106' rx='8' fill='#8e6935'/><rect x='456' y='100' width='170' height='106' rx='8' fill='#9f4939'/><rect x='664' y='100' width='82' height='106' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='136'>Plan snapshot</text><text x='27' y='163'>C0 · intent</text><text x='27' y='187'>Requirements</text><text x='249' y='136'>Change event</text><text x='249' y='163'>schema · auth</text><text x='249' y='187'>env · model</text><text x='469' y='136'>Execution gate</text><text x='469' y='163'>Current C(t)</text><text x='469' y='187'>Selective check</text><text x='675' y='125'>Go</text><text x='675' y='149'>Bind</text><text x='675' y='173'>Block</text><text x='675' y='197'>Hold</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 153H236'/><path d='M406 153H456'/><path d='M626 153H664'/></g><text x='238' y='56' fill='#35433b' font-size='16' font-family='sans-serif'>A change does not ratify an old plan</text><text x='196' y='260' fill='#35433b' font-size='15' font-family='sans-serif'>Revocation → block; in-flight effect → reconcile</text></svg><figcaption>Original explanatory illustration: the snapshot records planning context, while the execution gate uses current capability state. Changes lead to continue, rebind, block, or hold. Arrows do not imply that old authority remains valid. Scroll horizontally on mobile.</figcaption></figure>
+      <h3>1. Record dependencies, not an eternal tool menu</h3><p>Each plan node stores a typed intent, input entities and versions, expected postcondition, and requirement set. “Read invoices” may depend on read access to dataset D, query-tool semantics v2, tenant T as the resource boundary, and a suitable sandbox. “Send report” additionally needs outbound authority and verified recipients. A planning snapshot records how those requirements were met at the time, for replay and audit. It should not copy credentials, secrets, or all raw tool output. Store tamper-resistant references and digests while a dedicated authority system manages sensitive values.</p>
+      <h3>2. Classify change events instead of rerunning everything</h3><p>A missing tool, a newly required schema field, a changed default meaning, revoked data access, a new runtime image, and a model-routing change affect different nodes. A newly advertised tool usually does not invalidate existing nodes and certainly does not authorize the agent to use it. A compatible schema extension may need only validation; a semantic change needs argument rebinding and evaluation. Revocation immediately blocks affected actions; the model cannot rephrase the request to bypass it. An environment change requires checks of dependencies, network egress, and file mounts. An identical image digest identifies content but does not prove that external services stayed the same.</p>
+      <h3>3. Invalidate selectively through a requirement graph</h3><p>The runtime maps changed keys to unexecuted nodes that require them and propagates through data and control dependencies. Revoking finance-read authority prevents “read invoices” from starting and pauses a later summary that requires that fresh read. A previously verified aggregate that remains within its validity window and whose contract permits reuse need not be mechanically deleted. Reuse depends on data-retention policy and task intent, not merely on a file remaining on disk. Selective invalidation preserves unaffected work while blocking steps justified only under obsolete conditions.</p>
+      <h3>4. Make the dispatch gate depend on currently provable state</h3><p>Before dispatch, a broker checks normalized arguments and the current principal against allowed resources, the tool contract, and environment constraints. If the authorization service is unavailable, the result is unknown or hold, not “the last check passed, so allow.” Revocation means rejection with an auditable reason. OAuth introspection can provide some token-state signals; it does not by itself guarantee that every backend's resource permissions are synchronized. Consequential actions still need enforcement at the resource boundary. If a replacement model rewrites arguments, treat that as a new action proposal and rerun schema, policy, and intent-match checks rather than inheriting approval for the old proposal.</p>
+      <h3>5. Handle model-capability drift without confusing quality and authority</h3><p>Replacing model M1 with M2 can change tool selection, structured-output pass rate, long-context use, and counterexample detection. It neither revokes nor adds a credential, but it may invalidate the quality gate that allowed automatic execution for this task class. For a risky node, the runtime can pin a previously evaluated model snapshot, route to an evaluated alternative, downgrade to read-only or reviewed operation, or hold. HELM's multidimensional evaluation work is a reminder that one aggregate score does not describe every capability; concrete thresholds must come from this system's task distribution. Historical results for the old model are not production proof for its replacement.</p>
+      <h3>6. An already dispatched action needs reconciliation, not time travel</h3><p>If a report-send request was accepted at t₁ and authority was revoked after t₁, stop new dispatches but do not claim that the earlier email was unsent. Record its operation ID and effect owner, read back authoritative status, and use compensation or human handling where needed. A late callback from the old plan must not advance the revised plan; it still enters the effect ledger. We do not repeat durable-timer implementation here. The key distinction is between “this must not happen from now on” and “what already happened in the world.”</p>
+      <pre><code>on_change(change):
+  affected = pending_nodes_depending_on(change.keys)
+  invalidate_or_rebind(affected, change.kind)
+
+before_dispatch(node):
+  current = read_capability_state(node.requirements)
+  if current.unknown: return HOLD
+  if not authorized(node, current): return BLOCKED
+  if not compatible(node.contract, current): return REBIND
+  if not model_qualified(node.risk, current): return REVIEW
+  return dispatch_and_record_effect(node)
+</code></pre>
+      <p>These states and the selective-invalidation algorithm are editorial engineering design. The cited specifications define local protocol semantics; together they do not prescribe a controller spanning tools, identity, environment, and models.</p></div>
+      </section>
+      <section class="lesson-section" id="mathematics-en" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>A minimal current-capability gate</h2></header>
+        <div class="section-copy"><p>Let a be a pending action and t the dispatch time. Executability is not a Boolean value remembered from yesterday; it is the conjunction of current conditions:</p><div class='equation'>Ready(a,t) = Auth(a,t) ∧ ToolCompat(a,t) ∧ EnvReady(a,t) ∧ DataAllowed(a,t) ∧ ModelQualified(a,t)</div><p>Auth is authorization of the principal for this resource and operation. ToolCompat checks argument and semantic-contract compatibility. EnvReady means the runtime meets security and dependency conditions. DataAllowed covers current data entitlement and permitted purpose. ModelQualified is a quality gate for this task type and risk level. Different authoritative systems answer these conditions. Any false condition blocks dispatch; an unknown condition cannot silently become true and instead causes hold or escalation. A purely mechanical read may satisfy ModelQualified through deterministic code. A model-generated high-risk write needs explicit evaluation evidence. This formula expresses a control gate; it does not claim that every implementation has exactly five components.</p>
+      <p>To avoid recomputing a whole plan for every minor change, let V be its nodes, Δ the changed capability keys, and Req(v) the keys required by node v. Begin with nodes whose requirements intersect Δ, then extend through real result dependencies:</p><div class='equation'>Affected(Δ) = Downstream({v ∈ V | Req(v) ∩ Δ ≠ ∅})</div><p>Downstream includes the starting node and successors that use its output, not everything later in wall-clock time. A model-version change affects future nodes that need that model-quality gate, while completed authoritative reads may remain usable. Revoked data authority can block a report that requires a fresh read. Every node needs explicit Req and output dependencies; otherwise “selective” invalidation is guesswork.</p></div>
+      </section>
+      <section class="lesson-section" id="implications-en" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>Implications for agent systems</h2></header>
+        <div class="section-copy"><h3>Latency and cost</h3><p>Rediscovering every capability before every action slows an agent. Checking a node's Req and recent changes is cheaper. But cached authority has a staleness window, and a consequential write must not rely on an old cache. Low-risk read-only work and high-risk outbound actions may use different freshness and evidence requirements while the resource-side enforcement boundary remains mandatory.</p>
+      <h3>Reliability and observability</h3><p>Traces need the planning snapshot ID, current capability-state version, change event, affected nodes, gate result, argument digests before and after rebinding, and effect status. An auditor can then answer why the report was not sent on Tuesday and distinguish a hold caused by an unavailable service from a block caused by explicit revocation. The user interface should show what condition would permit recovery rather than saying only “tool error.”</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-en" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>Trade-offs and failure modes</h2></header>
+        <div class="section-copy"><p><strong>Snapshot versus live state:</strong> a snapshot alone helps replay but can preserve an obsolete grant. Live state alone may allow an action now while making yesterday's plan inexplicable. They serve different purposes. The snapshot is evidence of planning context; live state is the current authority and compatibility fact.</p>
+      <p><strong>Strict pinning versus migration:</strong> pinning a tool, model, or environment version reduces drift but may strand work when the old version disappears. Automatic migration preserves service but can change semantics. Compatibility must be judged for the particular action contract, not guessed from a higher version number. Without an explicit mapping, rebinding is a new proposal with new validation, not an edit to the historical plan record.</p>
+      <p><strong>Revocation versus outage:</strong> an authorization service explicitly returning revoked means block. A timeout or unreachable service means unknown and hold. They must not be collapsed into “no problem.” Aggressive fail-open can violate authority; conservative fail-closed can reduce availability. A contract may define different recovery paths for reads and sensitive writes, but the model must not invent its own security exception.</p>
+      <p><strong>Evaluation:</strong> inject a changed tool-field meaning, revoked grant, narrowed dataset, new image network policy, replacement model, and late callback into one task trajectory. Check whether only relevant nodes are invalidated, unauthorized actions are blocked, and committed effects retain a reconciliation owner. Separate false-allow rate, false-block rate, rebinding success, recovery time, extra cost, and audit completeness. Testing one tool's schema validation alone cannot detect cross-layer drift.</p>
+      <p>The next part will make approval requests, evidence packages, authority narrowing, expiry, and rollback concrete when a task needs greater or alternative capability. The rule today is that if current conditions cannot be proved, the system holds or produces a reviewable escalation proposal. It must not bypass a boundary by changing wording, tool names, or models.</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-en" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>Reusable judgments</h2></header>
+        <div class="section-copy"><ol><li>Keep the planning snapshot for provenance; use the current execution gate for action. Neither replaces the other.</li><li>Propagate capability changes by node requirements: continue when compatible, rebind changed semantics, block revoked authority, and hold unknown state.</li><li>A model version changes a quality profile, not tool permission; newly advertised tools are not automatically authorized either.</li><li>Reconcile committed effects. Revocation or replanning cannot erase what already happened.</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-en" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>Sources and evidence boundaries</h2></header>
+        <div class="section-copy"><ul class='source-list'><li><a href='https://csrc.nist.gov/pubs/sp/800/207/final'>NIST SP 800-207, Zero Trust Architecture</a> — official architectural guidance motivating access evaluation in current context; it does not define the plan-node API used here.</li><li><a href='https://datatracker.ietf.org/doc/html/rfc7009'>RFC 7009, OAuth 2.0 Token Revocation</a> and <a href='https://datatracker.ietf.org/doc/html/rfc7662'>RFC 7662, Token Introspection</a> — protocol semantics; revocation propagation and resource-side enforcement depend on implementation.</li><li><a href='https://modelcontextprotocol.io/specification/2025-06-18/server/tools'>MCP Tools Specification</a> — official specification for tool discovery and listChanged; a catalog update is not host authorization.</li><li><a href='https://github.com/opencontainers/image-spec/blob/main/descriptor.md'>OCI Image Spec: Descriptor</a> — official source specification for digest and other descriptor fields; pinning image content does not pin external services.</li><li><a href='https://arxiv.org/abs/2211.09110'>Liang et al., HELM</a> — author research on multidimensional language-model evaluation; its reported scores are not production thresholds for any current model here.</li></ul><p>Links and titles were checked on 2026-11-09. The capability vector, selective invalidation, five-condition execution gate, and recovery states are editorial engineering synthesis. No current product behavior is asserted.</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-en" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>Where this series stands</h2></header>
+        <div class="section-copy"><p><strong>Established today:</strong> a plan forms at t₀ under a capability snapshot; dispatch at t₁ checks current authority, tool semantics, environment, data permission, and model-quality gates; verification at t₂ uses authoritative readback. Each node declares a requirement set, and change propagates selectively through real dependencies. A new capability is not automatic authority; revocation blocks, semantic changes require rebinding, unknown state holds, and already dispatched actions enter reconciliation.</p><p><strong>Still open:</strong> when the task genuinely needs a new grant or alternative tool, how can the agent submit a reviewable escalation request without approving itself? How should approval bind the goal, resource, arguments, and expiry? What audit chain survives a temporary grant's expiration, further model or environment changes, human denial, and rollback?</p><p><strong>Next starting point:</strong> Dynamic Capability Boundaries Internals Part 2 of 2 begins from typed hold, rebind, and escalate outcomes. It designs least-authority escalation contracts, human approval, effect-bound grants, expiration, and change-injection evaluation. It will not repeat today's capability vector or invalidation formula.</p></div>
+      </section>
+    </article>
+    <nav class="issue-nav" aria-label="Issue navigation"><a href="2026-11-08.html"><span data-nav-language="zh">← 上一篇</span><span data-nav-language="en" hidden>← Previous</span><strong data-nav-language="zh">三个 Agent 的证据互相矛盾，谁能下结论？</strong><strong data-nav-language="en" hidden>Three Agents Disagree: Who Can Issue the Verdict?</strong></a><span></span></nav>
+  </main>
+  <script>
+(() => {
+  const switches = [...document.querySelectorAll("[data-set-language]")];
+  const lessons = [...document.querySelectorAll(".lesson[data-language]")];
+  function nearestSectionId() {
+    const visibleLesson = lessons.find((lesson) => !lesson.hidden);
+    if (!visibleLesson) return null;
+    const sections = [...visibleLesson.querySelectorAll("[data-section-id]")];
+    return sections.sort((a, b) => Math.abs(a.getBoundingClientRect().top - 100) - Math.abs(b.getBoundingClientRect().top - 100))[0]?.dataset.sectionId || null;
+  }
+  function setLanguage(language, preserveSection = false) {
+    if (!lessons.length) return;
+    const sectionId = preserveSection ? nearestSectionId() : null;
+    lessons.forEach((lesson) => { lesson.hidden = lesson.dataset.language !== language; });
+    document.querySelectorAll("[data-nav-language]").forEach((node) => { node.hidden = node.dataset.navLanguage !== language; });
+    switches.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.setLanguage === language)));
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    try { localStorage.setItem("ai-agent-deep-dive-language", language); } catch {}
+    if (sectionId) lessons.find((lesson) => lesson.dataset.language === language)?.querySelector('[data-section-id="' + sectionId + '"]')?.scrollIntoView({ block: "start" });
+  }
+  if (lessons.length) {
+    let stored = "zh";
+    try { stored = localStorage.getItem("ai-agent-deep-dive-language") || "zh"; } catch {}
+    setLanguage(stored === "en" ? "en" : "zh");
+    switches.forEach((button) => button.addEventListener("click", () => setLanguage(button.dataset.setLanguage, true)));
+  }
+  const search = document.querySelector("#archive-search");
+  if (search) search.addEventListener("input", () => {
+    const query = search.value.trim().toLowerCase();
+    const cards = [...document.querySelectorAll("[data-searchable]")];
+    let visible = 0;
+    cards.forEach((card) => { card.hidden = Boolean(query) && !card.dataset.searchable.includes(query); if (!card.hidden) visible += 1; });
+    const empty = document.querySelector(".empty-state");
+    if (empty) empty.hidden = visible !== 0;
+  });
+})();
+</script>
+</body>
+</html>
