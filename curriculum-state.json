@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-11-09",
-  "latestIssueDate": "2026-11-09",
+  "generatedAt": "2026-11-10",
+  "latestIssueDate": "2026-11-10",
   "completedTopics": [
+    "capability-escalation-effect-bound-approval-revocation",
     "multi-agent-evidence-merge-conflict-adjudication",
     "hierarchical-option-composition-interruption-evaluation",
     "model-based-planning-search-budget-risk-evaluation",
@@ -22,6 +23,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "dynamic-capability-boundaries-internals",
     "multi-agent-evidence-coordination-internals",
     "hierarchical-agent-control-internals",
     "agent-model-based-planning-internals",
@@ -42,6 +44,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-10",
+      "topicId": "capability-escalation-effect-bound-approval-revocation",
+      "seriesId": "dynamic-capability-boundaries-internals",
+      "part": 2,
+      "complete": true
+    },
     {
       "date": "2026-11-09",
       "topicId": "capability-drift-plan-execution-revalidation",
@@ -435,26 +444,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "dynamic-capability-boundaries-internals",
-    "nextPart": 2,
-    "established": {
-      "zh": [
-        "计划 t₀ 的能力快照用于来历与回放；派发 t₁ 使用当前授权、工具语义、环境、数据许可和模型质量门；核验 t₂ 确认效果",
-        "每个计划节点声明 requirement set，能力变化只使相关节点及真正依赖其输出的后继失效",
-        "新工具或更强模型不自动授予权限；撤权阻断、语义变化重绑定、状态未知暂停",
-        "已经派发的副作用必须保留 operation ID 与核对责任，旧计划不能穿越时间撤销现实效果"
-      ],
-      "en": [
-        "The t₀ capability snapshot supports provenance and replay; t₁ dispatch uses current authority, tool semantics, environment, data permission, and model-quality gates; t₂ verifies effects",
-        "Each plan node declares a requirement set, so capability changes invalidate only affected nodes and true result dependents",
-        "A new tool or stronger model does not grant authority; revocation blocks, semantic changes require rebinding, and unknown state holds",
-        "Already dispatched effects retain operation IDs and reconciliation ownership; an old plan cannot reverse real-world effects across time"
-      ]
-    },
-    "next": {
-      "zh": "Dynamic Capability Boundaries Internals 2/2：从 hold/rebind/escalate 结果设计最小权限升级、人工批准、effect-bound 授权、到期撤销与变更注入评测。",
-      "en": "Dynamic Capability Boundaries Internals 2/2: start from hold, rebind, and escalate outcomes to design least-authority upgrades, human approval, effect-bound grants, expiry, and change-injection evaluation."
-    }
-  }
+  "pendingSeries": null
 }
