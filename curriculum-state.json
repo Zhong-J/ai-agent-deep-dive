@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-11-11",
-  "latestIssueDate": "2026-11-11",
+  "generatedAt": "2026-11-12",
+  "latestIssueDate": "2026-11-12",
   "completedTopics": [
+    "goal-scoped-memory-preference-validity-conflict",
     "capability-escalation-effect-bound-approval-revocation",
     "multi-agent-evidence-merge-conflict-adjudication",
     "hierarchical-option-composition-interruption-evaluation",
@@ -23,6 +24,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "long-horizon-goal-integrity-internals",
     "dynamic-capability-boundaries-internals",
     "multi-agent-evidence-coordination-internals",
     "hierarchical-agent-control-internals",
@@ -44,6 +46,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-12",
+      "topicId": "goal-scoped-memory-preference-validity-conflict",
+      "seriesId": "long-horizon-goal-integrity-internals",
+      "part": 2,
+      "complete": true
+    },
     {
       "date": "2026-11-11",
       "topicId": "long-horizon-goal-ledger-progress-evidence",
@@ -451,26 +460,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "long-horizon-goal-integrity-internals",
-    "nextPart": 2,
-    "established": {
-      "zh": [
-        "Goal 是经授权的验收合同，plan 是候选路径，progress 是逐项证据支持的判断；步骤计数不是完成率",
-        "目标记录包含 owner、范围、验收、禁止事项、版本、生效时间与授权来源，进度 ledger 连接证据和未决效果",
-        "目标改变创建新版本；旧证据经范围、时效、来源和政策门迁移，旧副作用仍保留核对责任",
-        "长期任务恢复从当前权威目标开始，memory 与聊天摘要只是候选信息，不能静默修订目标"
-      ],
-      "en": [
-        "A goal is an authorized acceptance contract, a plan a candidate route, and progress a per-condition evidence judgment; step count is not completion",
-        "A goal record includes owner, scope, acceptance, forbidden outcomes, version, effective time, and authorization source; the progress ledger links evidence and unresolved effects",
-        "A changed goal creates a new version; old evidence passes scope, freshness, provenance, and policy gates before reuse while old effects retain reconciliation ownership",
-        "A long task resumes from the current authoritative goal; memory and chat summaries are candidate information, not silent goal amendments"
-      ]
-    },
-    "next": {
-      "zh": "Long-Horizon Goal Integrity Internals 2/2：从当前 goalVersion 与有来源/期限的 memory claim 出发，设计临时偏好绑定、冲突优先级、失效传播和评测。",
-      "en": "Long-Horizon Goal Integrity Internals 2/2: start with the current goalVersion and sourced, time-bounded memory claims to design preference binding, conflict precedence, invalidation, and evaluation."
-    }
-  }
+  "pendingSeries": null
 }
