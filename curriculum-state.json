@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-11-12",
-  "latestIssueDate": "2026-11-12",
+  "generatedAt": "2026-11-13",
+  "latestIssueDate": "2026-11-13",
   "completedTopics": [
+    "irreversible-agent-action-commit-gates-risk-budget",
     "goal-scoped-memory-preference-validity-conflict",
     "capability-escalation-effect-bound-approval-revocation",
     "multi-agent-evidence-merge-conflict-adjudication",
@@ -24,6 +25,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "irreversible-agent-action-internals",
     "long-horizon-goal-integrity-internals",
     "dynamic-capability-boundaries-internals",
     "multi-agent-evidence-coordination-internals",
@@ -46,6 +48,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-13",
+      "topicId": "irreversible-agent-action-commit-gates-risk-budget",
+      "seriesId": "irreversible-agent-action-internals",
+      "part": 1,
+      "complete": true
+    },
     {
       "date": "2026-11-12",
       "topicId": "goal-scoped-memory-preference-validity-conflict",
