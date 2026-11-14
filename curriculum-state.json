@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-13",
-  "latestIssueDate": "2026-11-13",
+  "generatedAt": "2026-11-14",
+  "latestIssueDate": "2026-11-14",
   "completedTopics": [
     "irreversible-agent-action-commit-gates-risk-budget",
     "goal-scoped-memory-preference-validity-conflict",
@@ -48,6 +48,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-14",
+      "topicId": "agent-eval-distribution-shift-trajectory-support",
+      "seriesId": "agent-evaluation-under-shift-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-11-13",
       "topicId": "irreversible-agent-action-commit-gates-risk-budget",
@@ -469,5 +476,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "agent-evaluation-under-shift-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "Agent eval 的单位是带目标、模型、工具、权限、环境、动作、观察、效果与 verifier 的完整 trajectory envelope",
+        "离线通过率只对 P_eval 和当时验收口径成立；新任务分布及高损失 slice 需要单独覆盖",
+        "历史日志仅支持旧策略实际走过的分支，候选新动作若无支持必须标 unsupported，模拟不能冒充真实轨迹",
+        "版本变化按依赖失效相关 eval slice，报告覆盖、证据等级和尾部硬失败，不以总体分数掩盖"
+      ],
+      "en": [
+        "The unit of agent evaluation is a complete trajectory envelope with goal, model, tools, authority, environment, actions, observations, effects, and verifier",
+        "An offline pass rate applies to P_eval and its acceptance semantics; new task distributions and high-loss slices need separate coverage",
+        "Historical logs support only branches taken by the old policy; unsupported candidate actions must be labeled, and simulation is not real trajectory evidence",
+        "Version changes invalidate affected eval slices by dependency; report coverage, evidence level, and tail hard failures rather than hiding them in an aggregate"
+      ]
+    },
+    "next": {
+      "zh": "Agent Evaluation Under Shift Internals 2/2：从 unsupported slice 出发，设计 shadow、隔离执行、小流量 canary、漂移监测、停止规则与发布证据等级。",
+      "en": "Agent Evaluation Under Shift Internals 2/2: start from unsupported slices and design shadow, isolated execution, limited canary, drift monitoring, stop rules, and release evidence levels."
+    }
+  }
 }
