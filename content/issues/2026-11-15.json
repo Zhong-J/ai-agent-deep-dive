@@ -1,0 +1,153 @@
+{
+  "date": "2026-11-15",
+  "slug": "agent-eval-shadow-canary-shift-release-gates",
+  "readingMinutes": 20,
+  "topicId": "agent-eval-shadow-canary-shift-release-gates",
+  "series": {
+    "id": "agent-evaluation-under-shift-internals",
+    "title": {
+      "zh": "Agent Evaluation Under Shift Internals",
+      "en": "Agent Evaluation Under Shift Internals"
+    },
+    "part": 2,
+    "total": 2,
+    "complete": true
+  },
+  "title": {
+    "zh": "离线评测不够时，Agent 怎样安全取得上线证据？",
+    "en": "When Offline Evals Are Insufficient, How Can an Agent Earn Production Evidence?"
+  },
+  "dek": {
+    "zh": "从 unsupported slice 进入隔离执行、shadow 与小流量 canary。每一层只声称自己实际证明的内容，并用漂移触发器、硬失败停止门和效果核对控制扩大。",
+    "en": "Move from unsupported slices through isolated execution, shadow, and limited canary. Let each level claim only what it proves, then control expansion with drift triggers, hard-failure stops, and effect reconciliation."
+  },
+  "tags": [
+    "Agent evaluation",
+    "Shadow runs",
+    "Canary release",
+    "Distribution shift",
+    "Release gates"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>昨天的 coverage report 显示：候选 Agent 在“跨租户写入 + 新工具参数”这一高风险 slice 没有历史日志支持。离线分数仍是 95%，但该分支未被证明。团队不能直接放量，也不能让 shadow 在真实用户账户里偷偷试写。问题变成：<strong>怎样逐级取得新证据，同时限制每一步可能造成的真实副作用？</strong></p>\n      <p>本篇给出一条受控路线：隔离环境验证新分支的可执行反馈；shadow 在真实输入下生成候选动作但拦截外部写入；小流量 canary 仅让经授权的工作流产生真实效果，并与对照组比较。每一层都记录自己证明了什么、没证明什么。生产分布、工具、模型或目标再变化时，发布门按依赖重新打开，而不是沿用一次通过的“永久合格证”。</p>\n      <p>9 月的 Memory 系列和 10 月的可靠性、Extension 安全篇都提过 shadow/canary。本篇不重复“先小流量上线”的清单，而是从昨天的 unsupported action branch 出发，展开轨迹对齐、影子写入限制、实验分配、序贯监测、停止规则与证据等级。风险管理者最终批准扩大范围；模型和评测报告不能自行授予生产权限。</p>\n      <div class='callout'><strong>核心界限：</strong>shadow 看到真实输入，不等于它验证了真实写入；canary 有真实效果，因此必须像生产动作一样经过用户目标、权限和效果门。</div>",
+        "en": "<p>Yesterday's coverage report found a high-risk slice—cross-tenant writes with a new tool parameter—for which the candidate agent has no supporting historical log. Its overall offline score is still 95%, but this branch has not been established. The team cannot simply expand traffic, and a shadow run cannot secretly try a write in real user accounts. The question is <strong>how to gather new evidence in stages while limiting real side effects at each stage.</strong></p>\n      <p>This part builds a controlled path: an isolated environment tests executable feedback on the new branch; shadow uses real inputs to propose actions while blocking external writes; a limited canary produces real effects only in authorized workflows and is compared with a control cohort. Each stage records what it proved and what it did not. A change in production distribution, tools, models, or goal acceptance reopens the relevant release gate rather than preserving a permanent “passed” certificate.</p>\n      <p>The September Memory series and October reliability and extension-security issues mentioned shadow and canary. We do not repeat a generic “roll out slowly” checklist. Starting from yesterday's unsupported action branch, we examine trajectory comparison, shadow-write limits, experiment assignment, sequential monitoring, stop rules, and evidence levels. A responsible release owner approves expansion; neither the model nor an eval report grants production authority.</p>\n      <div class='callout'><strong>Boundary:</strong> shadow seeing real inputs does not mean it verified a real write. A canary does create real effects and must pass user-goal, authority, and effect gates just like any production action.</div>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "承接离线覆盖与新动作分支",
+        "en": "From offline coverage to new action branches"
+      },
+      "html": {
+        "zh": "<p>上一篇用 trajectory envelope 固定 goalVersion、模型、工具、权限、环境、动作、观察、效果与 verifier；P_eval 与生产分布不同，历史策略没走过的动作分支不能凭空回放。今天的输入不是一个通过率，而是一张带 unsupported、模拟、已观察标记的 coverage matrix。我们要为其中高损失且可能发生的空格取得新证据。</p>\n      <p>隔离执行、shadow 和 canary 的证据互补，并非简单的“可信度从 1 到 3”。隔离环境可真实执行某些写操作并检查最终状态，但它的后端、权限、延迟可能与生产不同。shadow 使用真实请求和当前工具目录，却必须拦截写入，因此只能评估选择、参数、只读观察和提案的风险。canary 能观察真实用户目标与真实副作用，暴露面也随之增加。把三者分开标注，比单一成功率更有工程价值。</p>\n      <p>Google SRE Workbook 对 canary release 的官方实践强调比较新旧版本的生产指标；Always Valid Inference 研究解释连续查看实验结果为何需要合适的序贯统计方法。Label Shift 论文给出某类分布变化的检测和校正研究。这些来源不能替本系统设定审批角色或风险阈值；本文的 Agent 证据阶梯是编辑性工程综合。</p>",
+        "en": "<p>The previous part froze goalVersion, model, tools, authority, environment, actions, observations, effects, and verifier in a trajectory envelope. P_eval can differ from production, and a branch never taken by the logging policy cannot be replayed as fact. Today's input is therefore not a pass rate but a coverage matrix with unsupported, simulated, and observed cells. We need evidence for high-loss cells that production may actually reach.</p>\n      <p>Isolated execution, shadow, and canary are complementary rather than a simple trust score from one to three. Isolation can perform certain writes and inspect the resulting state, but its backend, authority model, and latency may differ from production. Shadow sees real requests and current tool catalogs but must block writes; it can assess action selection, arguments, read-only observations, and proposed-effect risk. Canary sees real goals and side effects, increasing exposure. Labeling each capability is more useful than blending them into one success rate.</p>\n      <p>Google's SRE Workbook gives first-party practice for comparing new and old versions in a canary release. Always Valid Inference studies why continuously inspecting experiment results needs proper sequential inference. The Label Shift paper studies detection and correction of one class of distribution change. These sources do not set approval roles or risk thresholds for this system; the agent evidence ladder here is editorial engineering synthesis.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "从隔离到 Canary 的证据阶梯",
+        "en": "An evidence ladder from isolation to canary"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 305' role='img' aria-labelledby='release-zh-title release-zh-desc'><title id='release-zh-title'>从无支持分支到受控生产证据</title><desc id='release-zh-desc'>离线报告标出未覆盖的动作分支。隔离执行用可检查的模拟资源测试候选动作；shadow 使用真实输入但阻断外部写入；小流量 canary 在获得授权的工作流中产生真实效果。每一级记录自身能与不能证明的内容，发布门依据高风险切片和停止信号决定扩大或回退。</desc><rect x='14' y='87' width='174' height='125' rx='8' fill='#20312a'/><rect x='216' y='87' width='157' height='125' rx='8' fill='#8e6935'/><rect x='401' y='87' width='159' height='125' rx='8' fill='#9f4939'/><rect x='588' y='87' width='158' height='125' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='123'>离线缺口</text><text x='27' y='151'>unsupported</text><text x='27' y='179'>slice · versions</text><text x='229' y='123'>隔离执行</text><text x='229' y='151'>可查模拟状态</text><text x='414' y='123'>Shadow</text><text x='414' y='151'>真实输入</text><text x='414' y='179'>拦截写入</text><text x='601' y='123'>Canary</text><text x='601' y='151'>少量真实效果</text><text x='601' y='179'>停止 / 扩大</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 148H216'/><path d='M373 148H401'/><path d='M560 148H588'/></g><text x='115' y='54' fill='#35433b' font-size='16' font-family='sans-serif'>每级证据都保留“不能证明什么”</text><text x='170' y='260' fill='#35433b' font-size='15' font-family='sans-serif'>回退停止新派发；已提交效果仍须核对</text></svg><figcaption>原创示意：证据从模拟到真实效果逐级增加，但 shadow 不能证明未执行写入的结果；回退只能停止新效果。手机可横向滑动。</figcaption></figure>\n      <h3>1. 将 unsupported slice 变成可测试场景</h3><p>先定义目标、资源和可观察终态，而非只复刻用户 prompt。跨租户写入案例至少包括允许与禁止的租户、工具 schema 新字段、策略版本、可见数据、模拟后端状态、effect ID 与 verifier。准备“应当拒绝”“可执行且成功”“工具成功但目标未满足”“超时后实际提交”等对照轨迹。隔离环境要能在动作后读回状态，并阻止真实凭据和网络出口进入；若只模拟一个固定成功 JSON，不能证明 Agent 会处理失败。</p>\n      <h3>2. Shadow 只发提案，不造成真实写入</h3><p>在真实请求旁路运行候选 Agent，复用经过授权的数据投影，且用 broker 拦截写操作，记录规范化 action proposal、参数摘要、目标版本和被拒原因。只读工具也要检查查询成本与敏感数据范围；“shadow”不是无限读取许可。对照正式 Agent 的结果时，不要求每一步完全相同：候选可能用另一条合法路径。比较可验证目标、权限、成本与风险，而不是用 token 相似度判优。对候选未实际执行的写入，标 proposed_not_executed；不能把它的预测成功写进分子。</p>\n      <h3>3. 选 Canary 单位与暴露边界</h3><p>从已获用户/业务授权的低风险工作流开始，按用户、任务或租户稳定分配到 baseline 与 candidate，避免同一长任务中途换策略导致混合轨迹。明确 canary 的工具 scope、最大并发、预算、可写资源和回退开关。若 unsupported slice 是高影响跨租户写入，不能因为“canary 只有 1%”就绕过权限或预演门；先在隔离环境覆盖，再由业务 owner 决定是否有真实小流量证据路径。1% 是暴露比例，不是错误损失上限。</p>\n      <h3>4. 监测领先指标与最终效果</h3><p>每条轨迹保留 assignment cohort、版本和 source provenance。实时监测越权调用、重复 effect、outcome_unknown、工具 schema 拒绝、用户撤销/投诉以及预算超限；它们可作为硬停止信号。最终目标成功、用户满意和长期副作用可能滞后，需要定义观察窗口与 delayed readback owner。candidate 与 baseline 同期比较，并按高风险 slice 分层；若只看整体平均延迟，权限类尾部错误可能被掩盖。</p>\n      <h3>5. 设停止、扩大与回退规则</h3><p>发布前写清：出现任何未授权真实写入即停止新 candidate dispatch；重复发送或未知效果率越界则冻结扩大并追查；样本不足或高风险 slice 未覆盖时保持 canary 而非宣布胜利。连续看图并在“刚好显著”时停止会膨胀误报，需预先设观察窗或使用有效的序贯推断方法。回退只使后续任务回 baseline，不能撤回已经提交的邮件或预订；在途 effect ledger 继续由原 owner 核对。</p>\n      <h3>6. 变化触发重新打开发布门</h3><p>模型快照、工具 schema、数据/权限政策、目标验收或生产任务 mix 变化时，按依赖找到相关 eval slice。以生产 intake 的特征分布和 outcome/拒绝模式检测漂移，但不能仅因一个总量统计没变就放行。Label shift 是一类可能的变化，工具语义漂移或策略反馈循环不一定符合其假设。重跑必要隔离测试、shadow 比较和可行的 canary；仍有效的旧证据可留作历史，不应伪装成新版本的完整证明。</p>\n      <pre><code>for slice in coverage.unsupported_high_loss:\n  require(isolated_stateful_tests(slice))\n  shadow = run_read_only_candidate(slice, real_inputs)\n  label_shadow_writes(PROPOSED_NOT_EXECUTED)\n  if hard_failure(shadow): stop_release(slice)\n  if approved_for_real_effects(slice): start_sticky_canary(slice)\n  monitor_hard_stops_and_delayed_verdicts()\n  expand_only_if(coverage_and_risk_gate_pass())\n</code></pre>\n      <p>这是编辑性发布控制草图。可否开展真实 canary 由现行授权和业务审批决定，不由代码中的“通过”字符串自动决定。</p>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 305' role='img' aria-labelledby='release-en-title release-en-desc'><title id='release-en-title'>From unsupported branches to controlled production evidence</title><desc id='release-en-desc'>Offline coverage identifies unsupported actions. Isolated execution tests candidate actions against inspectable simulated resources; shadow uses real inputs but blocks external writes; a small canary produces real effects in authorized workflows. Each level records what it can and cannot prove. A release gate uses risky slices and stop signals to expand or roll back.</desc><rect x='14' y='87' width='174' height='125' rx='8' fill='#20312a'/><rect x='216' y='87' width='157' height='125' rx='8' fill='#8e6935'/><rect x='401' y='87' width='159' height='125' rx='8' fill='#9f4939'/><rect x='588' y='87' width='158' height='125' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='123'>Offline gap</text><text x='27' y='151'>unsupported</text><text x='27' y='179'>slice · versions</text><text x='229' y='123'>Isolated run</text><text x='229' y='151'>Inspectable sim</text><text x='414' y='123'>Shadow</text><text x='414' y='151'>Real inputs</text><text x='414' y='179'>Writes blocked</text><text x='601' y='123'>Canary</text><text x='601' y='151'>Limited real effects</text><text x='601' y='179'>Stop / expand</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 148H216'/><path d='M373 148H401'/><path d='M560 148H588'/></g><text x='115' y='54' fill='#35433b' font-size='16' font-family='sans-serif'>Each evidence level records its blind spots</text><text x='170' y='260' fill='#35433b' font-size='15' font-family='sans-serif'>Rollback stops new dispatch; committed effects still need readback</text></svg><figcaption>Original explanatory illustration: evidence moves from simulation toward real effects, but shadow cannot prove outcomes of writes it never executed. Rollback stops new effects only. Scroll horizontally on mobile.</figcaption></figure>\n      <h3>1. Turn an unsupported slice into an executable scenario</h3><p>Define the goal, resources, and observable terminal state rather than copying only the user prompt. A cross-tenant-write case needs allowed and forbidden tenants, the new tool-schema field, policy version, visible data, simulated backend state, effect IDs, and a verifier. Include paired trajectories: should refuse; allowed and successful; tool reports success but goal remains unmet; timeout after an actual commit. The isolated environment must permit state readback after an action and prevent real credentials or network egress from leaking into it. A fixed success JSON cannot demonstrate failure handling.</p>\n      <h3>2. Let shadow propose without creating a real write</h3><p>Run the candidate beside real requests with an authorized data projection and a broker that intercepts writes. Record normalized action proposals, argument digests, goal versions, and reasons a proposed effect was blocked. Read-only calls still need cost and sensitive-data scope limits; “shadow” is not unlimited read authority. Comparison with the baseline agent does not require identical intermediate steps, since the candidate may take another valid route. Compare verifiable goal outcomes, authority, cost, and risk rather than token similarity. A write the candidate never executed is labeled proposed_not_executed; its predicted success is not added to a success numerator.</p>\n      <h3>3. Choose a canary unit and exposure boundary</h3><p>Begin with low-risk workflows whose users and business owners have authorized real use. Assign users, tasks, or tenants stably to baseline and candidate so one long-running task does not switch policies midway and produce a mixed trajectory. Define canary tool scope, maximum concurrency, budget, writable resources, and rollback switch. If the unsupported slice is a consequential cross-tenant write, “only 1% canary” does not override authority or preview gates. Cover it in isolation first; a business owner then decides whether a real low-volume evidence path exists. One percent is an exposure fraction, not a bound on loss.</p>\n      <h3>4. Monitor leading signals and eventual effects</h3><p>Each trajectory retains its assignment cohort, versions, and source provenance. Watch unauthorized calls, duplicate effects, outcome_unknown, tool-schema rejection, user revocation or complaint, and budget breach in near real time; some are hard stop signals. Goal completion, user satisfaction, and downstream effects may lag, so define a readback window and owner for delayed outcomes. Compare candidate with baseline over the same period and stratify high-risk slices. An aggregate latency improvement can conceal rare authorization failures.</p>\n      <h3>5. Predeclare stop, expand, and rollback rules</h3><p>Before release, state that any unauthorized real write stops new candidate dispatch. Duplicate sends or an excessive unknown-outcome rate freeze expansion and require investigation. Missing sample size or an uncovered risky slice keeps the canary running or on hold rather than declaring victory. Repeatedly checking a dashboard and stopping at the first favorable significance level inflates false alarms; predeclare a window or use appropriate sequential inference. Rollback routes future tasks to baseline. It cannot unsend mail or cancel a booking retroactively, so the original effect owner continues to reconcile in-flight operations.</p>\n      <h3>6. Reopen release gates when relevant state changes</h3><p>When model snapshot, tool schema, data or authority policy, goal acceptance, or production task mix changes, use dependency mapping to find affected eval slices. Detect shifts in production-intake features and in outcome or rejection patterns. An unchanged aggregate metric does not establish that the mix stayed safe. Label shift is one possible change; changed tool semantics and policy feedback loops do not necessarily satisfy its assumptions. Rerun necessary isolated tests, shadow comparisons, and feasible canaries. Old evidence that still applies remains historical support, but must not be presented as complete proof for a new version.</p>\n      <pre><code>for slice in coverage.unsupported_high_loss:\n  require(isolated_stateful_tests(slice))\n  shadow = run_read_only_candidate(slice, real_inputs)\n  label_shadow_writes(PROPOSED_NOT_EXECUTED)\n  if hard_failure(shadow): stop_release(slice)\n  if approved_for_real_effects(slice): start_sticky_canary(slice)\n  monitor_hard_stops_and_delayed_verdicts()\n  expand_only_if(coverage_and_risk_gate_pass())\n</code></pre>\n      <p>This is an editorial release-control sketch. Whether a real canary is allowed depends on current authority and business approval, not a string saying “passed” in code.</p>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "零次失败不等于零风险",
+        "en": "Zero observed failures is not zero risk"
+      },
+      "html": {
+        "zh": "<p>假设某高风险 slice 中 n 次独立、同分布的 canary 真实操作没有观察到失败。若真实失败概率为 p，零失败概率是 (1−p)ⁿ。把它设为 0.05，可得约 95% 单侧上界：</p><div class='equation'>p_upper = 1 − 0.05^(1/n) ≈ 3/n</div><p>n 是该 slice 的真实可核验操作数，不是所有用户请求数；p_upper 是在这些强假设下的概率上界。100 次零失败，上界仍约 3%，远非“已证明安全”。如果任务相关、版本中途变化、结果还没读回，独立同分布假设不成立，这个式子更不能直接用。高严重度副作用还要硬停止门，不能只等统计显著。</p>\n      <p>反复观察 canary 指标时，常规固定样本置信区间会失去原来的错误率保证。Always Valid Inference 研究提供序贯分析路线；工程上必须在发布前定义何时查看、何时停止以及多指标如何控制误报。监测的目标不是拼出漂亮 p 值，而是在有限暴露中尽早发现越权、重复效果与质量退化，同时诚实报告仍未观察到的尾部。</p>\n      <p>发布门可以写成逻辑合取：必要 slice 覆盖、无未处置硬失败、延迟结果已核验、当前版本仍匹配、回退和 effect owner 就绪。任何一个为 unknown 都不应转成 true。这个门是本文工程合同，阈值由业务损失与授权政策决定。</p>",
+        "en": "<p>Suppose n independent, identically distributed real canary operations in a risky slice show no failure. If their true failure probability is p, the chance of observing zero failures is (1−p)ⁿ. Setting that probability to 0.05 gives an approximate one-sided 95% upper bound:</p><div class='equation'>p_upper = 1 − 0.05^(1/n) ≈ 3/n</div><p>n counts real operations in that slice with verified outcomes, not all user requests. p_upper is an upper bound only under the stated assumptions. With zero failures in 100 operations, the bound is still roughly 3%, far from “proved safe.” Correlated tasks, a changing model midway, or outcomes not yet read back invalidate the independent-identically-distributed assumption. Severe side effects also need a hard stop, not merely a significance threshold.</p>\n      <p>Repeated inspection of canary dashboards breaks the intended error guarantees of conventional fixed-sample intervals. Always Valid Inference offers a sequential-analysis approach. In practice, define review timing, stop rules, and multiple-metric treatment before exposure. The purpose is not to manufacture an attractive p-value. It is to detect unauthorized actions, duplicate effects, and quality regression early under limited exposure while honestly reporting tails not yet observed.</p>\n      <p>A release gate can be expressed as a conjunction: necessary slices covered, no unresolved hard failures, delayed outcomes read back, versions still matching, and rollback plus effect ownership ready. An unknown condition must not turn true by default. This is an engineering contract whose thresholds depend on business loss and authority policy.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统的影响",
+        "en": "Implications for agent systems"
+      },
+      "html": {
+        "zh": "<h3>能力与延迟</h3><p>证据阶梯让新工具分支有机会获得反馈，而不把用户当免费的试验环境。隔离测试先找明显越权与状态错误，shadow 检查真实输入下的选择和参数，canary 验证有限真实效果。每一层有成本；只为高损失缺口补证比全量重跑更经济。</p>\n      <h3>可观察性与责任</h3><p>发布记录应写明每个 slice 的证据等级、样本数、模型/工具/政策版本、硬失败、迟到核验与决定扩大的人。若回退，只停止新任务并保留旧 effect owner。这样团队能区分“候选在 shadow 中提出了正确写入”与“经授权真实写入后目标得到核验”。</p>",
+        "en": "<h3>Capability and latency</h3><p>The evidence ladder lets a new tool branch receive feedback without treating users as a free test environment. Isolation catches obvious authority and state errors, shadow checks choice and arguments on real inputs, and canary verifies limited real effects. Each level has cost. Filling high-loss evidence gaps deliberately is often cheaper than rerunning everything.</p>\n      <h3>Observability and accountability</h3><p>A release record names evidence level, sample count, model and tool and policy versions, hard failures, delayed readbacks, and who approved expansion for each slice. Rollback stops new tasks while retaining old effect owners. This distinguishes “the candidate proposed a correct write in shadow” from “an authorized real write achieved a verified goal.”</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<p><strong>Shadow 的盲点：</strong>它可看真实输入却不能执行真实写入，因此缺少写入成功、竞争、延迟和下游通知的反馈。若团队把 shadow 的“预计成功”计入线上通过率，就再次制造昨天的 unsupported 分支错误。隔离环境的模拟写入可补一些机制证据，但仍需标注不是真实生产。</p>\n      <p><strong>Canary 的选择偏差：</strong>只挑最友好用户、最简单租户会低估风险；随机分配要在有授权的 eligible population 内，并保留风险分层。若候选策略本身改变哪些任务进入系统，baseline 与 candidate 的分布可能被反馈影响，比较时需记录入口和路由。不同 cohort 的隐私与资源边界仍由政策控制。</p>\n      <p><strong>回退幻觉：</strong>关闭 feature flag 并不会撤销已发邮件。Canary 的外部效果必须像正式生产一样带 operation ID、读回、补救和负责人。对不可补偿的高风险动作，即使 canary 暴露很小，也可选择先人工审批或完全不开放该路径，直到有足够隔离证据。</p>\n      <p><strong>漂移误报与漏报：</strong>新节假日任务 mix、工具后端改版、模型路由策略变化都可能改变错误率。单一分布检验可能报出无害变化，也可能漏掉小而危险的高损失 slice。把漂移信号映射到依赖、结果和授权门；用于提示重测，不让一个统计量自动发布或自动封禁全部任务。</p>\n      <p><strong>发布评测：</strong>注入写入拦截失效、canary sticky assignment 丢失、零失败但样本过少、授权撤销、迟到效果、指标反复窥视及回退后回调。要求系统停止新派发、保留效果核对、准确降级证据等级，并能解释为何扩大或暂停。若这些条件不满足，离线和 shadow 的高分不足以宣称可安全放量。</p>",
+        "en": "<p><strong>Shadow blind spot:</strong> it sees real inputs but does not execute real writes, so it lacks feedback about write success, races, latency, and downstream notification. Counting shadow “predicted success” as online success recreates yesterday's unsupported-branch error. Simulated writes in isolation can add mechanism evidence but remain labeled as non-production.</p>\n      <p><strong>Canary selection bias:</strong> choosing only friendly users or easy tenants understates risk. Randomization belongs inside an authorized eligible population with risk strata retained. If the candidate policy changes which tasks enter the system, baseline and candidate distributions may be affected by feedback; record intake and routing for comparison. Privacy and resource boundaries still apply to every cohort.</p>\n      <p><strong>Rollback illusion:</strong> turning off a feature flag cannot recall sent mail. Canary effects need operation IDs, readback, repair paths, and an owner just like ordinary production. For a non-compensatable high-risk action, even a small canary may remain behind human approval or be withheld entirely until stronger isolated evidence exists.</p>\n      <p><strong>Shift false positives and misses:</strong> holidays, backend changes, or model-routing revisions can alter error rates. One distribution test may report harmless change or miss a small dangerous high-loss slice. Map shift signals to dependencies, outcomes, and authority gates. They trigger targeted re-evaluation rather than letting one statistic automatically release or shut down everything.</p>\n      <p><strong>Release evaluation:</strong> inject failed write interception, lost sticky assignment, zero failures with too few cases, revoked authority, late effects, repeated peeking at metrics, and callbacks after rollback. Require the system to stop new dispatch, retain effect reconciliation, downgrade evidence level accurately, and explain expansion or hold. Without those properties, strong offline and shadow scores do not establish safe broad release.</p>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可以带走的判断",
+        "en": "Reusable judgments"
+      },
+      "html": {
+        "zh": "<ol><li>隔离、shadow、canary 证明不同事情；shadow 的未执行写入永远不能算真实成功。</li><li>Canary 用稳定工作流分配与授权小流量，监测高风险 slice 和迟到效果，预先写停止规则。</li><li>零次失败仍有统计上界；频繁查看指标需序贯方法，硬越权信号无需等显著性。</li><li>模型、工具、政策或任务 mix 变化时按依赖重开相关发布门；回退不撤销已提交效果。</li></ol>",
+        "en": "<ol><li>Isolation, shadow, and canary prove different things. A shadow write never executed cannot count as real success.</li><li>Canary uses sticky authorized workflow assignment, monitors risky slices and delayed effects, and has predeclared stop rules.</li><li>Zero failures still leaves an uncertainty bound. Repeated metric checks need sequential methods; unauthorized writes are hard stops without waiting for significance.</li><li>Model, tool, policy, or task-mix changes reopen dependent release gates. Rollback does not undo committed effects.</li></ol>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "来源与证据边界",
+        "en": "Sources and evidence boundaries"
+      },
+      "html": {
+        "zh": "<ul class='source-list'><li><a href='https://sre.google/workbook/canarying-releases/'>Google SRE Workbook, Canarying Releases</a> — 官方实践说明 canary 与新旧版本比较；Agent 的 effect 门为本文扩展。</li><li><a href='https://arxiv.org/abs/1512.04922'>Johari et al., Always Valid Inference</a> — 作者研究在线实验的序贯有效推断；本文不声称某个固定样本量适合所有 Agent。</li><li><a href='https://arxiv.org/abs/1802.03916'>Lipton et al., Detecting and Correcting for Label Shift with Black Box Predictors</a> — 作者研究一类分布变化及假设；不能覆盖所有工具/政策漂移。</li><li><a href='https://arxiv.org/abs/1511.03722'>Jiang &amp; Li, Doubly Robust Off-policy Value Evaluation</a> — 昨天的原始研究，说明无支持动作分支不能靠日志直接证明新策略。</li></ul><p>链接和标题已于 2026-11-15 核验。隔离→shadow→canary 的证据标注、Agent 硬停止门和发布合同是编辑性工程综合；没有宣称任何当前产品默认采用这些阈值。</p>",
+        "en": "<ul class='source-list'><li><a href='https://sre.google/workbook/canarying-releases/'>Google SRE Workbook, Canarying Releases</a> — first-party practice for canaries and comparing new with old versions; agent effect gates here are an extension.</li><li><a href='https://arxiv.org/abs/1512.04922'>Johari et al., Always Valid Inference</a> — author research on sequentially valid online experiments; it does not prescribe one sample size for every agent.</li><li><a href='https://arxiv.org/abs/1802.03916'>Lipton et al., Detecting and Correcting for Label Shift with Black Box Predictors</a> — author research on one class of distribution shift and its assumptions; it does not cover every tool or policy drift.</li><li><a href='https://arxiv.org/abs/1511.03722'>Jiang &amp; Li, Doubly Robust Off-policy Value Evaluation</a> — the primary work cited yesterday on why unsupported actions cannot be directly established from old logs.</li></ul><p>Links and titles were checked on 2026-11-15. The isolated-to-shadow-to-canary evidence labeling, agent hard stops, and release contract are editorial engineering synthesis. No current product is claimed to use these thresholds by default.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "专题收束与下一站",
+        "en": "Series close and next stop"
+      },
+      "html": {
+        "zh": "<p><strong>本专题已讲完：</strong>1/2 把 Agent eval 的单位定为完整轨迹，说明离线分布与生产分布不一致、历史日志对候选新动作缺少支持；报告按任务 slice、证据等级与硬失败拆分。2/2 从 unsupported slice 进入有状态隔离执行、只读且拦截写入的 shadow、稳定分配的小流量 canary；监测真实与迟到效果，预先定义停止/扩大/回退，并在版本或分布变化时重新打开相关发布门。两篇的共同边界是：证据只证明它实际观察到的轨迹。</p><p><strong>尚未讲完：</strong>本专题的离线覆盖到线上发布链已闭合。具体 canary 比例和风险阈值依业务损失与授权决定，不在文章里虚构。</p><p><strong>下一篇起点：</strong>回到系统路线，选择新的独立问题：当多个工具与模型的价格、延迟和可靠性不断变化，Agent 如何为完整任务计算真实成本并选择执行策略？明天不续讲本专题。</p>",
+        "en": "<p><strong>Completed in this series:</strong> Part 1 made a full trajectory the unit of agent evaluation and explained why offline task distribution and production differ and why old logs lack support for a candidate's new actions. Reports split results by task slice, evidence level, and hard failure. Part 2 moved from unsupported slices to stateful isolated execution, read-only shadow with blocked writes, and sticky limited canary. It monitored real and delayed effects, predeclared stop, expand, and rollback rules, and reopened affected release gates after version or distribution change. Both parts share one boundary: evidence proves only trajectories it actually observed.</p><p><strong>Still open:</strong> the offline-to-online release chain of this series is complete. Canary percentages and risk thresholds depend on business loss and authorization and are not invented here.</p><p><strong>Next starting point:</strong> return to the systematic path with a separate question: as tool and model prices, latency, and reliability change, how should an agent compute true whole-task cost and choose an execution strategy? This series does not continue tomorrow.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "complete",
+    "established": {
+      "zh": [
+        "Agent eval 以目标、模型、工具、权限、环境、动作、观察、效果和 verifier 的完整轨迹为单位；离线分数仅对覆盖分布成立",
+        "历史日志不支持候选未走过的动作；隔离模拟、真实输入 shadow 与真实效果 canary 必须标注不同证据等级",
+        "Shadow 拦截写入且不能证明真实写入结果；canary 稳定分配授权工作流，监测硬失败与迟到效果",
+        "预设停止/扩大/回退规则，版本或生产 mix 漂移时按依赖重开发布门；回退不撤销既有副作用"
+      ],
+      "en": [
+        "Agent evaluation uses full trajectories of goals, models, tools, authority, environments, actions, observations, effects, and verifiers; offline scores apply only to covered distributions",
+        "Old logs do not support unseen candidate actions; isolated simulation, real-input shadow, and real-effect canary require distinct evidence labels",
+        "Shadow blocks writes and cannot prove real write outcomes; canary uses sticky authorized workflow assignment and monitors hard failures plus delayed effects",
+        "Stop, expand, and rollback rules are predeclared; version or production-mix shift reopens dependent gates, and rollback does not undo committed effects"
+      ]
+    },
+    "next": {
+      "zh": "本专题已完成；下一篇从工具与模型价格、延迟和可靠性变化出发，讨论 Agent 完整任务成本与执行策略选择。",
+      "en": "This series is complete; the next topic begins with changing tool and model prices, latency, and reliability to examine whole-task cost and execution-strategy choice."
+    }
+  }
+}
