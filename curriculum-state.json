@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-11-16",
-  "latestIssueDate": "2026-11-16",
+  "generatedAt": "2026-11-17",
+  "latestIssueDate": "2026-11-17",
   "completedTopics": [
+    "agent-whole-task-policy-selection-budget-tail-risk",
     "agent-eval-shadow-canary-shift-release-gates",
     "irreversible-agent-action-commit-gates-risk-budget",
     "goal-scoped-memory-preference-validity-conflict",
@@ -26,6 +27,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "agent-whole-task-economics-internals",
     "agent-evaluation-under-shift-internals",
     "irreversible-agent-action-internals",
     "long-horizon-goal-integrity-internals",
@@ -50,6 +52,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-17",
+      "topicId": "agent-whole-task-policy-selection-budget-tail-risk",
+      "seriesId": "agent-whole-task-economics-internals",
+      "part": 2,
+      "complete": true
+    },
     {
       "date": "2026-11-16",
       "topicId": "agent-whole-task-cost-ledger-retry-verification",
@@ -492,26 +501,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "agent-whole-task-economics-internals",
-    "nextPart": 2,
-    "established": {
-      "zh": [
-        "完整任务以 goalVersion/taskId 为成本单位，所有模型、工具、核验、修复、人工与核对 attempt 都需归集，失败和 unknown 不能消失",
-        "incurred、reserved、projected 分开，货币、关键路径用户延迟与风险分别记账",
-        "按任务类别和已核验成功率估计条件性修复成本；单次模型调用降价不保证总任务成本下降",
-        "共享费、缓存和价格版本需可复现归因，成功样本偏差及尾部风险不能被总体平均掩盖"
-      ],
-      "en": [
-        "A whole task identified by goalVersion/taskId is the cost unit; model, tool, verification, repair, human, and reconciliation attempts are attributed, including failed and unknown outcomes",
-        "Incurred, reserved, and projected amounts differ, while money, critical-path user latency, and risk remain separate ledgers",
-        "Estimate conditional repair cost from verified success by task class; lower first-call model price does not guarantee lower task cost",
-        "Shared costs, caches, and price versions need reproducible attribution; success-only bias and tail risk cannot hide in aggregate averages"
-      ]
-    },
-    "next": {
-      "zh": "Agent Whole-Task Economics Internals 2/2：从同类任务的已核验轨迹与价格版本出发，比较条件执行策略、预算准入、尾部延迟和安全约束。",
-      "en": "Agent Whole-Task Economics Internals 2/2: start with verified trajectories and price versions for comparable tasks to choose conditional execution policies under budget admission, tail latency, and safety constraints."
-    }
-  }
+  "pendingSeries": null
 }
