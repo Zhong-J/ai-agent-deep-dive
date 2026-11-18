@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-17",
-  "latestIssueDate": "2026-11-17",
+  "generatedAt": "2026-11-18",
+  "latestIssueDate": "2026-11-18",
   "completedTopics": [
     "agent-whole-task-policy-selection-budget-tail-risk",
     "agent-eval-shadow-canary-shift-release-gates",
@@ -52,6 +52,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-18",
+      "topicId": "multi-tool-observation-consistency-context-packet",
+      "seriesId": "multi-tool-working-context-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-11-17",
       "topicId": "agent-whole-task-policy-selection-budget-tail-risk",
@@ -501,5 +508,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "multi-tool-working-context-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "多工具结果须按下一动作的 required facts 编译，observation envelope 保留实体、scope、时间、版本、来源、覆盖与错误状态",
+        "逐条真实观察不保证可合成一个共同状态；跨系统版本不可直接排序，因果/时间不明时重读或暂停",
+        "context packet 保留已核验事实、原始引用、冲突、缺口与硬约束，不能靠模型叙述抹平不一致",
+        "证据包不是权限 token；模型提出动作后 broker 仍按当前资源与授权重验"
+      ],
+      "en": [
+        "Compile multi-tool results from the next action’s required facts; observation envelopes retain entity, scope, time, version, provenance, coverage, and errors",
+        "Individually true observations need not form one joint state; cross-system versions cannot be ordered directly, so unknown causality or time requires reread or hold",
+        "A context packet retains verified facts, raw references, conflicts, gaps, and hard constraints instead of letting fluent prose erase inconsistency",
+        "An evidence packet is not an authority token; the broker revalidates current resource and permission after the model proposes an action"
+      ]
+    },
+    "next": {
+      "zh": "Multi-Tool Working Context Internals 2/2：从已对齐 observation envelope 出发，讲 token 预算下的依赖闭包、低失真压缩、taint 传播和模型使用评测。",
+      "en": "Multi-Tool Working Context Internals 2/2: start from aligned observation envelopes and cover dependency closure under token budget, low-distortion compression, taint propagation, and model-use evaluation."
+    }
+  }
 }
