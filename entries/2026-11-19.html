@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>证据太长装不下，Agent 该删掉哪一部分？ · AI Agent Deep Dive</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body class="issue-page">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><i></i><span>AI Agent<br><b>Deep Dive</b></span></a>
+    <div class="language-switch" role="group" aria-label="Language">
+      <button type="button" data-set-language="zh" aria-pressed="true">中文</button>
+      <button type="button" data-set-language="en" aria-pressed="false">English</button>
+    </div>
+  </header>
+  <main>
+    <article class="lesson" data-language="zh">
+      <p class="kicker">Multi-Tool Working Context Internals · 第 2/2 篇</p>
+      <h1>证据太长装不下，Agent 该删掉哪一部分？</h1>
+      <p class="dek">从已对齐的工具观察出发：关键事实必须连同来源、单位、否定和限制条件一起入包；可选背景才参与压缩。工具文本经摘要也仍是数据，最后用动作级评测检验。</p>
+      <div class="issue-meta"><span>2026-11-19</span><span>约 20 分钟</span><span>Context engineering / Token budget / Compression / Prompt injection / Model-use evaluation</span></div>
+
+      <section class="lesson-section" id="proposition-zh" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>今日命题</h2></header>
+        <div class="section-copy"><p>昨天，采购 Agent 已把库存、价格和权限工具的结果按实体、时间、版本对齐，避免拼出从未同时存在的状态。现在工具返回 40 页合同和日志，下一次模型调用只剩 8,000 token。压缩器把“仅仓库 A 的 P 商品可按 80 CNY 购买；仓库 B 不适用；价格 10:05 失效”缩成“P 可按 80 购买”。句子更短，却删除了行动的范围、币种和期限。模型据此向 B 下单时，错误是上下文编译引入的，而不是模型没读全原文。</p>
+      <p><strong>今日命题：</strong>token 预算下的选择不是 top-k 文本截断，而是保护下一动作的证据依赖闭包。结论若入包，支撑它的来源、实体、单位、否定、异常和有效期也必须可读或可按 ID 读回。次要背景可以压缩，关键约束不能因短而消失。工具自由文本即使被总结，也仍是低信任数据；“请忽略之前规则”不会通过摘要变成系统指令。</p>
+      <p>9 月讲过摘要树和通用 memory assembly，10 月讲过 RAG 证据 packing 与 prompt injection，11 月 18 日讲了多工具一致性 join。今天只推进一个具体交界：<strong>已经对齐的 observation envelope 怎样变成下一动作可用、低失真且不越权的工作包</strong>，并用动作级观测验证是否真有用。</p>
+      <div class='callout'><strong>技术判断：</strong>如果关键证据及限制条件放不进窗口，应缩小查询、分阶段核验或暂停；不能删掉反例来满足 token 上限。</div></div>
+      </section>
+      <section class="lesson-section" id="connection-zh" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>从一致性切面到最小充分工作包</h2></header>
+        <div class="section-copy"><p>昨天的 observation envelope 保留实体、scope、eventTime/observedAt、版本、来源、coverage 和 isError；context packet 已有 goal、候选动作、已核验事实、冲突与缺口。这意味着编译器不用再猜哪些工具结果可以 join。剩下的难题是：在有限窗口内，哪些字段是行动必要条件，哪些只是解释背景？对“下单 P”而言，仓库、数量、币种、价格有效期、权限上限和拒绝原因是必要；三周前的营销描述不是。</p>
+      <p>LLMLingua 的作者研究 prompt 压缩的效率与任务效果，Lost in the Middle 的作者报告长上下文中信息位置影响模型使用。它们说明“给更多 token”与“让模型真正用对证据”不是同一目标；作者实验并未规定本业务的必留字段。W3C PROV 的派生链可以表示“这句短摘要来自哪条原文”；它不保证摘要忠实。MCP 工具结果规范提供结构化与错误表面，却不自动阻止工具内容在 prompt 里冒充指令。保护这些边界是本文编辑性工程设计。</p>
+      <p>因此，工作包既不是“原文全塞”也不是“只留摘要”。它是一份有 schema 的行动证据投影：保留硬约束和异常的准确字段，次要材料用可读回的引用替代，必须叙述的内容优先 extractive span，再考虑有核对的抽象摘要。</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-zh" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>依赖闭包、压缩与污染标签</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 760 305' role='img' aria-labelledby='pack-zh-title pack-zh-desc'><title id='pack-zh-title'>受预算约束的证据闭包与污染标签</title><desc id='pack-zh-desc'>对齐后的工具观察中，一条结论依赖原始记录、单位和限制条件。上下文编译器先保留必需证据及其依赖闭包，再在预算内选择可压缩背景；摘要继承来源和不可信文本标签。模型只据此提出动作，broker 仍按当前权限和原始证据核对。</desc><rect x='14' y='87' width='174' height='125' rx='8' fill='#20312a'/><rect x='226' y='87' width='178' height='125' rx='8' fill='#8e6935'/><rect x='442' y='87' width='150' height='125' rx='8' fill='#9f4939'/><rect x='630' y='87' width='116' height='125' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='123'>对齐的观察</text><text x='27' y='151'>source · scope</text><text x='27' y='179'>taint · versions</text><text x='239' y='123'>依赖闭包</text><text x='239' y='151'>必需 + 限定</text><text x='239' y='179'>token budget</text><text x='455' y='123'>低失真压缩</text><text x='455' y='151'>refs · negation</text><text x='643' y='123'>工作包</text><text x='643' y='151'>提案</text><text x='643' y='179'>broker gate</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 148H226'/><path d='M404 148H442'/><path d='M592 148H630'/></g><text x='100' y='53' fill='#35433b' font-size='16' font-family='sans-serif'>摘要不能把工具文本升级成系统指令</text><text x='143' y='262' fill='#35433b' font-size='15' font-family='sans-serif'>放不下关键闭包 → 缩小查询或暂停，而非删反例</text></svg><figcaption>原创示意：关键证据与限制条件先于可选背景占用预算；摘要保留来源和污染标签，不获得指令权。手机可横向滑动。</figcaption></figure>
+      <h3>1. 给下一动作列不可省略的字段</h3><p>从 action contract 取 required facts 与 forbidden effects，建立 mandatory lane：当前 goalVersion、实体键、scope、数量/单位、价格有效期、权限状态、未决 effect、冲突与拒绝。这里的“必留”是业务语义，不是按文本长度或 embedding 相似度排名。某些字段在工具结果里不存在，直接标 unknown；不能把缺失字段从 mandatory 清单移走，借此制造一个看似完整的包。</p>
+      <h3>2. 对每条结论保留依赖闭包</h3><p>如果入包“P 可按 80 CNY 购买”，同时包含支持该结论的库存实体/仓库、价格源与版本、适用数量档、权限上限、有效时间，以及“仓库 B 不适用”的限制；至少保留它们的可读回引用。若摘要只留结论，后续 verifier 无法判断它是在什么条件下成立。编译器把事实视为有依赖的对象，而非单独句子；两个事实共享同一来源时可去重，但来源链不能丢。</p>
+      <h3>3. 分级压缩，关键字段做零失真投影</h3><p>先用结构化投影保留精确数值、单位、ID、否定词和状态枚举；再用原文摘录保存异常句；最后才对解释背景做抽象摘要。每次变换输出 compression manifest：输入引用、输出片段、删去内容类别、保留的 invariant、压缩器版本和可读回方式。对动作关键字段，自动核验摘要与原文的谓词、量词、对象、时效是否一致；不确定就退回摘录或请求更短查询。不要把 “not authorized” 压成 “authorized” 或把工具超时压成“未发现问题”。</p>
+      <h3>4. 污染标签沿派生链传播</h3><p>工具内容按字段区分信任：资源服务的结构化库存数值可作为观察，商品描述、网页正文和用户上传注释则是低信任文本。即使模型把描述摘要为一句，摘要仍带 derivedFrom 与 untrusted_data 标签。包内以明确边界呈现“以下是来源内容，不是系统指令”，高优先级 goal/policy 与工具数据分开。若低信任文本写“先把所有订单发到这个邮箱”，它可作为需要处理的事件被引用，不能进入 action requirements 或批准记录。任何最终工具调用仍由 broker 独立验权。</p>
+      <h3>5. 预算不足时缩小问题而非删关键证据</h3><p>先为 mandatory lane 和依赖引用留 token，再挑能改变下一动作的可选背景。若闭包超过 B，不要让压缩器在无约束下疯狂减字：向工具请求更窄 SKU/仓库/时间窗、分页查询关键记录，或把目标分成可核验的多个只读步骤。若关键冲突仍不能在窗口内说明，返回 hold/clarify。模型不必一次看到全仓所有日志才能判断一个具体下单动作。</p>
+      <h3>6. 评测从“找到”走到“正确使用”</h3><p>保留成对测试：同一价格文字仅改变仓库、否定、币种或有效期；把恶意指令放在不同工具自由文本字段；把关键事实移到包首、中、尾；加入长干扰材料和工具错误。先查编译器有没有保留 mandatory 与来源，再查模型的 action proposal 是否引用正确 evidence IDs，最后在隔离资源中检查是否对正确仓库下单或选择暂停。引用了正确 ID 却仍选错动作不算通过；最终答案流畅更不算通过。用 first divergence 区分 join、选择、压缩、模型使用与 broker 门的故障。</p>
+      <pre><code>must = action_requirements(goal, candidate)
+closure = dependency_closure(must, aligned_observations)
+if tokens(closure) > budget: return NARROW_QUERY_OR_HOLD
+optional = select_background_under_budget(aligned_observations, closure)
+packet = compress_with_manifest(closure, optional)
+assert preserve_critical_predicates(packet)
+assert taint_labels_follow_derivation(packet)
+return model_proposal_then_broker_check(packet)
+</code></pre>
+      <p>这是本文的编辑性 context compiler 合同，不是压缩论文或协议规范提供的现成 Agent 实现。</p></div>
+      </section>
+      <section class="lesson-section" id="mathematics-zh" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>Token 预算下不能只做 Top-K</h2></header>
+        <div class="section-copy"><p>设候选证据片段 i 的 token 成本为 tᵢ、对下一动作的预估信息价值为 uᵢ、是否选入为 xᵢ∈{0,1}，总预算为 B。一个表面上的选择式是最大化 Σuᵢxᵢ 且 Σtᵢxᵢ≤B；但对 Agent 还必须加两类硬约束：</p><div class='equation'>max Σᵢuᵢxᵢ，s.t. Σᵢtᵢxᵢ≤B；M⊆S；∀e∈S, dep(e)⊆S</div><p>S 是选入集合，M 是由动作合同指定的必需字段与反例，dep(e) 是片段 e 的来源和限定条件。M⊆S 防止高相似度背景挤掉权限拒绝；依赖闭包防止只保留“80 元”却丢“仓库 A、有期限”。uᵢ 只是启发式排序值，不是事实真值；硬约束优先。若 M 的闭包本身超过 B，问题无可行解，应缩小查询或分阶段行动，而不是偷偷减少 M。</p>
+      <p>低失真也需要可判定目标。令关键谓词集合 K 包含权限、否定、数量、单位、实体和有效期，对每个 k 设是否被压缩改变的指示函数 Iₖ，则：</p><div class='equation'>D_critical = Σ<sub>k∈K</sub> wₖ·Iₖ，要求 D_critical=0</div><p>wₖ 表示该谓词出错的业务损失权重，Iₖ=1 表示摘要改变或遗漏了 k。对关键字段要求零失真；可选解释背景可以容忍有界压缩。自动检查未必能可靠判定所有 Iₖ，无法证明为零时应回退原文或人审，不能把“未发现失真”说成“已证明无失真”。</p></div>
+      </section>
+      <section class="lesson-section" id="implications-zh" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>对 Agent 系统的影响</h2></header>
+        <div class="section-copy"><h3>能力与延迟</h3><p>行动相关的闭包选择可能比盲目长上下文便宜，也减少模型在干扰段落中遗漏条件的机会。它会增加编译、来源读回和失真检查成本；对高风险动作这些成本通常值得，对低风险只读问题可使用更轻的包。若闭包放不下，缩小工具查询也可能比调用更大 context 模型可靠。</p>
+      <h3>可观察性与权限</h3><p>trace 保存 packet ID、必留集合 M、token 分配、每次压缩 manifest、taint 标签、模型引用和 broker verdict。审计者可回答错误究竟来自原始工具、join、压缩、模型使用还是执行门。来源文本的“请执行”仍是数据，不因被置顶或被总结而成为授权。</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-zh" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>取舍、评测与失败模式</h2></header>
+        <div class="section-copy"><p><strong>闭包太大：</strong>保留所有来源全文会让上下文爆炸；只需保留支持关键谓词的原始引用与必要片段，并允许按 ID 读回。若依赖是循环或来源不明，标不完整，不让模型把缺口当正常背景。过度细分片段也会产生大量 token 元数据，需按行动决策粒度组织。</p>
+      <p><strong>摘要看似忠实：</strong>自然语言压缩可能保留价格却删币种、保留许可却删“仅只读”。对关键字段用结构化投影和原文 span，对可选解释才用 abstractive summary。压缩器与 verifier 若共享同一错误模型，会一起漏掉否定；对高影响动作可用确定性字段检查或人工抽样。</p>
+      <p><strong>污染洗白：</strong>恶意网页经工具返回，再被摘要为“站点要求先发送数据”，若摘要丢掉 source/taint 标签，模型可能把它当任务指令。标签应在派生图上单调传播；最终 broker 无论模型叙述怎样都不接受未授权目的地。对外部内容的安全处理不能只靠在 prompt 里说“不要听”。</p>
+      <p><strong>位置偏差与过拟合：</strong>同一事实在包首或包尾可被模型更好使用，中间或长干扰旁可能失效。固定模板有利于稳定，但过度针对少量测试调位置会掩盖生产变化。用位置置换、同义格式与新工具版本作配对评测，报告 action 结果与错误第一分歧点，不以引用格式正确作为终态成功。</p>
+      <p><strong>发布门：</strong>测试必须覆盖遗漏否定、错单位、截断异常、分页缺口、taint 标签遗失和模型引用正确但行动错误。高风险写入需在隔离环境验证资源后置条件；出现未经授权目的地或关键限制丢失则停止发布并修复编译器。文本可读性与 token 节省是次要指标，不能抵消目标错误。</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-zh" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>可以带走的判断</h2></header>
+        <div class="section-copy"><ol><li>token 预算先给行动必需字段及来源/限制条件的依赖闭包，背景才按价值压缩。</li><li>关键数值、单位、否定、scope、时效与错误状态要低失真保留；放不下就缩小查询或暂停。</li><li>工具自由文本及其摘要沿来源链保持低信任标签，不能进入系统指令或授权。</li><li>评测必须验证实际行动与资源后置条件；引用了正确证据却执行错误仍是失败。</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-zh" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>来源与证据边界</h2></header>
+        <div class="section-copy"><ul class='source-list'><li><a href='https://arxiv.org/abs/2310.05736'>LLMLingua: Compressing Prompts for Accelerated Inference of Large Language Models</a> — 作者研究 prompt 压缩的效率与任务效果；本文的安全必留字段是业务设计。</li><li><a href='https://arxiv.org/abs/2307.03172'>Liu et al., Lost in the Middle</a> — 作者报告长上下文位置信息使用差异；不是特定 Agent 编译器的生产证明。</li><li><a href='https://arxiv.org/abs/2302.12173'>Not what you've signed up for: Indirect Prompt Injection</a> — 作者研究应用集成 LLM 的间接注入威胁；本文的 taint 传播是工程综合。</li><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> — 官方来源/派生模型；不能自动保证摘要忠实。</li><li><a href='https://modelcontextprotocol.io/specification/2025-06-18/server/tools'>MCP Tools Specification</a> — 官方工具结果结构与错误语义；不定义本文的 context packet 安全门。</li></ul><p>链接和标题已于 2026-11-19 核验。依赖闭包、D_critical、压缩 manifest 与动作级发布门为编辑性工程设计；采购案例为假设。</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-zh" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>专题收束与下一站</h2></header>
+        <div class="section-copy"><p><strong>本专题已讲完：</strong>1/2 从下一动作反推 observation contract，按实体、scope、时间、版本与来源 join 多工具结果，不相容时明确冲突或重读，避免拼出不存在的共同状态。2/2 在 token 预算下保留必需事实及依赖闭包，分级压缩次要背景，让 taint 随摘要传播，并用配对轨迹验证模型是否真的据正确证据行动。两篇一起把 context packet 定义成有来源、低失真、可审计的行动输入，而非权限凭证。</p><p><strong>尚未讲完：</strong>本专题的对齐、编译、压缩与污染边界已闭合。更广课程可另论多模态观察的跨模态对齐或隐私最小化，不作为隐藏第三篇。</p><p><strong>下一篇起点：</strong>回到系统路线，选择独立问题：Agent 在不同身份和数据域间调用工具时，怎样判定一个结果可被带到哪个后续域，并避免合法读取变成越界外发？明天不续讲本专题。</p></div>
+      </section>
+    </article>
+    <article class="lesson" data-language="en" hidden>
+      <p class="kicker">Multi-Tool Working Context Internals · Part 2 of 2</p>
+      <h1>When Evidence Does Not Fit, What May an Agent Safely Leave Out?</h1>
+      <p class="dek">Start from aligned tool observations. Required facts travel with sources, units, negations, and limits; only optional background is compressed. Summarized tool text remains data, and action-level tests check whether the packet worked.</p>
+      <div class="issue-meta"><span>2026-11-19</span><span>20 min read</span><span>Context engineering / Token budget / Compression / Prompt injection / Model-use evaluation</span></div>
+
+      <section class="lesson-section" id="proposition-en" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>Today's proposition</h2></header>
+        <div class="section-copy"><p>Yesterday a purchasing agent aligned inventory, price, and authority results by entity, time, and version so it would not invent a joint state that never existed. Now tools return forty pages of contracts and logs, while the next model call has only 8,000 tokens available. A compressor turns “Only product P in warehouse A may be bought at 80 CNY; warehouse B is excluded; price expires at 10:05” into “P may be bought for 80.” The shorter sentence dropped action scope, currency, and expiry. If the model orders from B, the context compiler introduced the error; the model was never given the decisive limitation.</p>
+      <p><strong>Today's proposition:</strong> selection under a token budget is not top-k truncation. It protects the next action's evidence dependency closure. If a conclusion enters the packet, its source, entity, units, negation, exception, and validity must remain readable or retrievable by ID. Secondary background may be compressed; necessary constraints may not disappear merely because they are long. Tool free text stays lower-trust data even after summarization. “Ignore previous rules” cannot become a system instruction through a summary.</p>
+      <p>September covered summary trees and generic memory assembly, October covered RAG evidence packing and prompt injection, and November 18 covered consistency joins. This part concentrates on one interface: <strong>how aligned observation envelopes become a low-distortion, non-escalating working packet for the next action</strong>, and how action-level observations test whether it worked.</p>
+      <div class='callout'><strong>Engineering rule:</strong> if required evidence and limiting conditions do not fit, narrow the query, verify in stages, or hold. Do not remove rebuttal to meet the token ceiling.</div></div>
+      </section>
+      <section class="lesson-section" id="connection-en" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>From a consistency cut to a minimum sufficient packet</h2></header>
+        <div class="section-copy"><p>Yesterday's observation envelope retained entity, scope, eventTime and observedAt, version, provenance, coverage, and isError. Its context packet already had goal, proposed action, verified facts, conflicts, and gaps. The compiler need not guess again which tool results can join. The remaining problem is deciding what is necessary for action under a bounded window. For “order P,” warehouse, quantity, currency, price-validity period, authority ceiling, and rejection reasons matter. A three-week-old marketing description usually does not.</p>
+      <p>LLMLingua's authors studied prompt compression and task effects; Lost in the Middle's authors reported that position influences model use of long contexts. More tokens and correct evidence use are different goals, but those experiments do not specify mandatory fields for this business action. W3C PROV can represent that a short summary derives from a source record; it cannot guarantee faithful compression. MCP tool-result semantics provide structure and error signals but do not prevent tool content from impersonating instructions inside a prompt. Protecting those boundaries is editorial engineering design here.</p>
+      <p>The working packet is therefore neither “paste all raw text” nor “keep only a summary.” It is a schema-bound projection of action evidence: exact fields for hard constraints and exceptions, readable references for secondary material, extractive spans for important prose, and abstractive summaries only with a fidelity check.</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-en" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>Dependency closure, compression, and taint labels</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 760 305' role='img' aria-labelledby='pack-en-title pack-en-desc'><title id='pack-en-title'>Evidence closure and taint labels under a token budget</title><desc id='pack-en-desc'>Among aligned tool observations, a claim depends on original records, units, and limiting conditions. The compiler retains required evidence and its dependency closure before selecting compressible background under budget. Summaries inherit provenance and untrusted-text labels. The model proposes actions; the broker still checks current authority and original evidence.</desc><rect x='14' y='87' width='174' height='125' rx='8' fill='#20312a'/><rect x='226' y='87' width='178' height='125' rx='8' fill='#8e6935'/><rect x='442' y='87' width='150' height='125' rx='8' fill='#9f4939'/><rect x='630' y='87' width='116' height='125' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='123'>Aligned facts</text><text x='27' y='151'>source · scope</text><text x='27' y='179'>taint · versions</text><text x='239' y='123'>Dependency closure</text><text x='239' y='151'>Must + limits</text><text x='239' y='179'>token budget</text><text x='455' y='123'>Safe reduction</text><text x='455' y='151'>refs · negation</text><text x='643' y='123'>Packet</text><text x='643' y='151'>Proposal</text><text x='643' y='179'>broker gate</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 148H226'/><path d='M404 148H442'/><path d='M592 148H630'/></g><text x='100' y='53' fill='#35433b' font-size='16' font-family='sans-serif'>A summary cannot turn tool text into system instruction</text><text x='143' y='262' fill='#35433b' font-size='15' font-family='sans-serif'>If required closure does not fit, narrow the query or hold</text></svg><figcaption>Original explanatory illustration: required evidence and limitations take budget before optional background. Summaries retain provenance and taint labels without gaining instruction authority. Scroll horizontally on mobile.</figcaption></figure>
+      <h3>1. List fields the next action cannot omit</h3><p>From the action contract, extract required facts and forbidden effects into a mandatory lane: current goalVersion, entity key, scope, quantity and unit, price validity, authority status, unresolved effects, conflicts, and denials. “Must retain” is business semantics, not a ranking by text length or embedding similarity. If a tool result lacks one field, mark it unknown. The compiler may not remove that field from the mandatory list to make the packet look complete.</p>
+      <h3>2. Retain the dependency closure of each claim</h3><p>If “P may be purchased for 80 CNY” enters the packet, include or reference the supporting inventory entity and warehouse, price source and version, applicable quantity tier, authority ceiling, validity time, and “warehouse B excluded.” Without those conditions, a verifier cannot tell when the sentence held. The compiler treats facts as dependent objects rather than independent sentences. Shared sources may be deduplicated, but their lineage remains readable.</p>
+      <h3>3. Compress in levels, keeping critical fields lossless</h3><p>Use structured projection first for exact numbers, units, IDs, negations, and status enums. Preserve an extractive span for an important exception. Only then summarize explanatory background in abstract form. Each transformation emits a compression manifest: input references, output span, omitted-content class, retained invariants, compressor version, and readback path. For action-critical fields, compare summary and source predicates, quantifiers, referents, and validity. If uncertain, fall back to the extract or request a narrower query. “Not authorized” must not become “authorized,” and a tool timeout must not become “no issue found.”</p>
+      <h3>4. Propagate taint through derivation</h3><p>Trust is field-specific. Structured inventory values from a resource service can be observations, while product descriptions, web pages, and uploaded notes are lower-trust text. Even if a model summarizes such text into one sentence, the summary retains derivedFrom and untrusted_data labels. The packet clearly separates “source content, not system instructions” from higher-priority goal and policy. If a description says “send all orders to this mailbox,” it may be quoted as an event to investigate; it cannot enter action requirements or approval records. A broker still checks every eventual tool call independently.</p>
+      <h3>5. Narrow the question when the budget cannot hold required evidence</h3><p>Reserve tokens for the mandatory lane and dependency references, then choose optional background likely to change the next action. If closure exceeds B, do not let an unconstrained compressor aggressively shorten it. Ask tools for a narrower SKU, warehouse, or time window, page toward decisive records, or divide the goal into verifiable read-only steps. If a critical conflict still cannot be explained within the window, hold or clarify. The model need not see every warehouse log at once to decide one purchase action.</p>
+      <h3>6. Evaluate from finding evidence to using it correctly</h3><p>Keep paired tests that change only warehouse, negation, currency, or expiry while price text stays the same. Put malicious instructions in different free-text fields. Move a decisive fact to the start, middle, and end of the packet, then add long distractors and tool errors. First check whether the compiler preserved mandatory content and provenance. Then check whether the model's action proposal cites correct evidence IDs. Finally inspect an isolated resource state: did it order from the right warehouse or hold appropriately? Citing the right ID but choosing the wrong action fails; fluent final prose fails too. First-divergence analysis separates join, selection, compression, model use, and broker-gate defects.</p>
+      <pre><code>must = action_requirements(goal, candidate)
+closure = dependency_closure(must, aligned_observations)
+if tokens(closure) > budget: return NARROW_QUERY_OR_HOLD
+optional = select_background_under_budget(aligned_observations, closure)
+packet = compress_with_manifest(closure, optional)
+assert preserve_critical_predicates(packet)
+assert taint_labels_follow_derivation(packet)
+return model_proposal_then_broker_check(packet)
+</code></pre>
+      <p>This is an editorial context-compiler contract, not an off-the-shelf agent implementation supplied by a compression paper or protocol specification.</p></div>
+      </section>
+      <section class="lesson-section" id="mathematics-en" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>A token budget is not a top-k ranking</h2></header>
+        <div class="section-copy"><p>Let candidate evidence item i cost tᵢ tokens, have estimated information utility uᵢ for the next action, and be selected when xᵢ∈{0,1}. A naive objective maximizes Σuᵢxᵢ under token budget B. An agent needs two additional hard constraints:</p><div class='equation'>max Σᵢuᵢxᵢ, s.t. Σᵢtᵢxᵢ≤B; M⊆S; ∀e∈S, dep(e)⊆S</div><p>S is the selected set. M contains mandatory fields and rebuttals from the action contract. dep(e) contains an item's source and limiting conditions. M⊆S prevents high-similarity background from crowding out an authorization denial. Dependency closure prevents keeping “80” while dropping “warehouse A, valid until 10:05.” uᵢ is a heuristic ranking value, not truth. Hard constraints take priority. If the closure of M alone exceeds B, there is no feasible packet; narrow the query or act in stages instead of quietly shrinking M.</p>
+      <p>Low distortion also needs a checkable objective. Let critical predicate set K include authority, negation, quantity, units, entity, and validity. For each k, define indicator Iₖ for whether compression changed or omitted it:</p><div class='equation'>D_critical = Σ<sub>k∈K</sub> wₖ·Iₖ, requiring D_critical=0</div><p>wₖ is the business loss weight for an error in predicate k, and Iₖ=1 if the summary changed or dropped it. Critical fields require zero distortion; optional explanatory background may permit bounded reduction. An automated checker may not reliably determine every Iₖ. If zero cannot be established, fall back to the original span or human review. “No distortion found” must not become “no distortion proved.”</p></div>
+      </section>
+      <section class="lesson-section" id="implications-en" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>Implications for agent systems</h2></header>
+        <div class="section-copy"><h3>Capability and latency</h3><p>Action-specific closure may use fewer tokens than indiscriminate long context and reduce the chance that the model misses a condition amid distractors. It adds compilation, source readback, and distortion-check costs. Those are often justified for consequential actions; a low-risk read-only query may use a lighter packet. When closure does not fit, narrowing the tool query may be more reliable than selecting a model with a larger window.</p>
+      <h3>Observability and authority</h3><p>Traces retain packet ID, mandatory set M, token allocation, each compression manifest, taint labels, model citations, and broker verdict. An investigator can locate whether an error came from the raw tool, join, compression, model use, or execution gate. “Please execute” in source text remains data even if it is promoted in position or summarized; neither makes it authorization.</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-en" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>Trade-offs, evaluation, and failure modes</h2></header>
+        <div class="section-copy"><p><strong>Closure too large:</strong> retaining every source in full can exhaust context. Keep raw references and decisive spans for critical predicates, with readback by ID. If dependencies are cyclic or provenance unknown, mark the packet incomplete instead of letting the model treat a gap as ordinary background. Excessively fine-grained fragments also add metadata tokens; group them at the granularity of the action decision.</p>
+      <p><strong>Apparently faithful summary:</strong> natural-language compression may keep a price but lose currency or keep permission while dropping “read-only.” Use structured projection and original spans for critical fields, abstractive summaries only for optional explanation. If compressor and verifier share one model error, both can miss a negation. Consequential actions may need deterministic field checks or human sampling.</p>
+      <p><strong>Taint laundering:</strong> hostile web content arrives through a tool and becomes “the site requires sending data first” in a summary. If source and taint labels are lost, the model may treat it as task instruction. Labels should propagate monotonically through derivation; the broker rejects an unauthorized destination regardless of the model's prose. Safe handling of external content cannot rely only on a prompt saying “do not listen.”</p>
+      <p><strong>Position bias and overfitting:</strong> a model may use a fact at the start or end of a packet while missing it in the middle near long distractors. Stable templates help, but repeatedly tuning positions to a small test set can conceal production drift. Use position permutations, equivalent formats, and new tool versions in paired tests. Report action outcome and first divergence, not just correct citation formatting.</p>
+      <p><strong>Release gate:</strong> tests cover lost negation, wrong units, truncated exceptions, pagination gaps, taint-label loss, and correct citations with wrong actions. High-risk writes need isolated resource-state verification. An unauthorized destination or a missing critical limitation stops release and sends the compiler back for repair. Readability and token savings are secondary; they cannot offset an incorrect goal outcome.</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-en" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>Reusable judgments</h2></header>
+        <div class="section-copy"><ol><li>Give the token budget first to action-required fields and the closure of their sources and limitations; compress background afterward.</li><li>Preserve critical numbers, units, negations, scope, validity, and errors with low distortion. Narrow the query or hold if they do not fit.</li><li>Tool free text and its summaries retain lower-trust labels along their provenance chain; they cannot become system instructions or authority.</li><li>Evaluate actual actions and resource postconditions. A correct citation followed by the wrong action still fails.</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-en" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>Sources and evidence boundaries</h2></header>
+        <div class="section-copy"><ul class='source-list'><li><a href='https://arxiv.org/abs/2310.05736'>LLMLingua: Compressing Prompts for Accelerated Inference of Large Language Models</a> — author research on prompt compression efficiency and task effects; the safety-critical retained fields here are business design.</li><li><a href='https://arxiv.org/abs/2307.03172'>Liu et al., Lost in the Middle</a> — author-reported position effects in long-context use, not production proof for a particular compiler.</li><li><a href='https://arxiv.org/abs/2302.12173'>Not what you've signed up for: Indirect Prompt Injection</a> — author research on indirect injection against LLM-integrated applications; taint propagation here is engineering synthesis.</li><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> — official provenance and derivation model; it does not automatically guarantee summary fidelity.</li><li><a href='https://modelcontextprotocol.io/specification/2025-06-18/server/tools'>MCP Tools Specification</a> — official tool-result structure and error semantics; it does not define this context-packet safety gate.</li></ul><p>Links and titles were checked on 2026-11-19. Dependency closure, D_critical, compression manifests, and action-level release gates are editorial engineering design. The purchase case is hypothetical.</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-en" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>Series close and next stop</h2></header>
+        <div class="section-copy"><p><strong>Completed in this series:</strong> Part 1 derived an observation contract from the next action and joined tool results by entity, scope, time, version, and provenance. Incompatibility yielded an explicit conflict or reread rather than a fictional joint state. Part 2 protected required facts and dependency closure under token budget, compressed optional background in levels, propagated taint through summaries, and tested whether the model acted on correct evidence in paired trajectories. Together they define a context packet as sourced, low-distortion, auditable action input rather than a permission credential.</p><p><strong>Still open:</strong> alignment, compilation, compression, and contamination boundaries are complete in this series. Cross-modal alignment for multimodal observations or privacy minimization can be separate future topics, not a hidden third part.</p><p><strong>Next starting point:</strong> return to the systematic path with a separate question: as an agent calls tools across identities and data domains, how can it decide where a result may flow next and prevent a legitimate read from becoming an unauthorized outbound disclosure? This series does not continue tomorrow.</p></div>
+      </section>
+    </article>
+    <nav class="issue-nav" aria-label="Issue navigation"><a href="2026-11-18.html"><span data-nav-language="zh">← 上一篇</span><span data-nav-language="en" hidden>← Previous</span><strong data-nav-language="zh">三个工具都返回了结果，Agent 为什么仍可能拼出假事实？</strong><strong data-nav-language="en" hidden>Three Tools Returned Results. How Can an Agent Still Assemble a False Fact?</strong></a><span></span></nav>
+  </main>
+  <script>
+(() => {
+  const switches = [...document.querySelectorAll("[data-set-language]")];
+  const lessons = [...document.querySelectorAll(".lesson[data-language]")];
+  function nearestSectionId() {
+    const visibleLesson = lessons.find((lesson) => !lesson.hidden);
+    if (!visibleLesson) return null;
+    const sections = [...visibleLesson.querySelectorAll("[data-section-id]")];
+    return sections.sort((a, b) => Math.abs(a.getBoundingClientRect().top - 100) - Math.abs(b.getBoundingClientRect().top - 100))[0]?.dataset.sectionId || null;
+  }
+  function setLanguage(language, preserveSection = false) {
+    if (!lessons.length) return;
+    const sectionId = preserveSection ? nearestSectionId() : null;
+    lessons.forEach((lesson) => { lesson.hidden = lesson.dataset.language !== language; });
+    document.querySelectorAll("[data-nav-language]").forEach((node) => { node.hidden = node.dataset.navLanguage !== language; });
+    switches.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.setLanguage === language)));
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    try { localStorage.setItem("ai-agent-deep-dive-language", language); } catch {}
+    if (sectionId) lessons.find((lesson) => lesson.dataset.language === language)?.querySelector('[data-section-id="' + sectionId + '"]')?.scrollIntoView({ block: "start" });
+  }
+  if (lessons.length) {
+    let stored = "zh";
+    try { stored = localStorage.getItem("ai-agent-deep-dive-language") || "zh"; } catch {}
+    setLanguage(stored === "en" ? "en" : "zh");
+    switches.forEach((button) => button.addEventListener("click", () => setLanguage(button.dataset.setLanguage, true)));
+  }
+  const search = document.querySelector("#archive-search");
+  if (search) search.addEventListener("input", () => {
+    const query = search.value.trim().toLowerCase();
+    const cards = [...document.querySelectorAll("[data-searchable]")];
+    let visible = 0;
+    cards.forEach((card) => { card.hidden = Boolean(query) && !card.dataset.searchable.includes(query); if (!card.hidden) visible += 1; });
+    const empty = document.querySelector(".empty-state");
+    if (empty) empty.hidden = visible !== 0;
+  });
+})();
+</script>
+</body>
+</html>
