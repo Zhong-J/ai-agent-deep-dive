@@ -1,0 +1,153 @@
+{
+  "date": "2026-11-20",
+  "slug": "cross-domain-agent-data-flow-lineage-sink-policy",
+  "readingMinutes": 20,
+  "topicId": "cross-domain-agent-data-flow-lineage-sink-policy",
+  "series": {
+    "id": "cross-domain-agent-data-flow-internals",
+    "title": {
+      "zh": "Cross-Domain Agent Data Flow Internals",
+      "en": "Cross-Domain Agent Data Flow Internals"
+    },
+    "part": 1,
+    "total": 2,
+    "complete": false
+  },
+  "title": {
+    "zh": "Agent 合法读到的数据，为什么仍不能写进下一封邮件？",
+    "en": "Why Can’t an Agent Email Data It Was Allowed to Read?"
+  },
+  "dek": {
+    "zh": "跨身份与数据域的 Agent 会把合法读取的内容变成摘要、记忆和外发。来源限制必须随派生传播，每条流向都需独立核验受众、用途与权限。",
+    "en": "An agent crossing identities and domains turns lawful reads into summaries, memory, and outbound messages. Source restrictions must follow derived data, and each new sink requires its own audience, purpose, and authority check."
+  },
+  "tags": [
+    "Information flow",
+    "Data lineage",
+    "Authorization",
+    "Cross-tenant agents",
+    "Egress"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>一个支持 Agent 被授权调查跨租户故障，分别读取租户 A 与 B 的工单。它总结出两边都遇到同一错误，并准备给 A 的联系人发邮件说明。读取两份工单都合法，发给 A 的邮件却可能泄露 B 的客户名称、环境细节或独有症状。即使模型没有照抄原文，一句派生总结也可能携带 B 的受限信息。</p>\n      <p><strong>今日命题：</strong>资源读取、模型推理与向目的地发送是三段不同的数据流。系统必须跟踪每段内容来自哪个身份/租户/分类/用途，并在每个 sink 上检查能否进入该受众。授权读取某数据并不等于授权把它写入邮件、共享文档、长久记忆、日志或外部模型 API。派生内容不因改写、翻译或摘要而自动变成公开数据。</p>\n      <p>10 月已讲 prompt injection、沙箱 egress 与 Extension 偷取 secret；11 月 10 日讲了特定效果的权限升级，昨天讲了工具文本摘要仍保留 taint。本篇聚焦正常业务路径中的<strong>合法读取后的数据流转</strong>，即使没有攻击者、没有恶意字符串也会出现的越界披露。下一篇再深入可控降级、聚合和发布验证。</p>\n      <div class='callout'><strong>核心界限：</strong>“我能看见”只回答 read；“谁可以从我的产物里看见”必须在新的流向上重新判断。</div>",
+        "en": "<p>A support agent is authorized to investigate a cross-tenant incident and reads tickets from tenants A and B. It concludes that both saw the same error and prepares an explanatory email for A. Each read may be legitimate, yet that email could disclose B's customer name, environment detail, or distinctive symptom. A derived sentence can carry B-restricted information even if it quotes no source verbatim.</p>\n      <p><strong>Today's proposition:</strong> resource read, model inference, and delivery to a destination are separate data-flow stages. The system needs to track the identity, tenant, classification, and purpose from which each piece came, then check whether each new sink may receive it. Permission to read data does not grant permission to place it in email, a shared document, long-lived memory, logs, or an external model API. Rephrasing, translation, and summarization do not automatically make derived content public.</p>\n      <p>October covered prompt injection, sandbox egress, and secret theft through extensions. November 10 covered approval bound to a specific effect; yesterday covered taint carried through tool-text summaries. Here we focus on <strong>ordinary post-read data flow</strong>. Unauthorized disclosure can arise without an attacker or malicious string. The next part will examine controlled declassification, aggregation, and release verification.</p>\n      <div class='callout'><strong>Boundary:</strong> “I may see it” answers a read question. “Who may see my derived output?” needs a new decision at the next flow edge.</div>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "把工具结果当成带限制的数据对象",
+        "en": "Treat tool results as restricted data objects"
+      },
+      "html": {
+        "zh": "<p>熟悉的 Agent loop 会把 tool result 追加进上下文，模型再选择下一步。此处需要一层额外视角：结果不只是文字，也是带来源、用途与受众限制的数据对象。昨日的 context packet 已保留 sourceRef 和 derivedFrom；今天让这些关系跨越模型生成、工作区文件与外发继续存在。一个摘要的来源链指向 A+B 时，不能因为输出是一句话就清除 B 的标签。</p>\n      <p>Denning 的经典 lattice model 用安全标签的偏序与 join 表达信息如何随计算传播；W3C PROV-DM 描述实体、活动及派生关系。它们给本文提供形式背景，不直接定义租户政策。NIST SP 800-162 的 ABAC 说明主体、对象、动作与环境属性可参与访问决策；NIST SP 800-53 的 AC-4 控制关注信息流执行。Zanzibar 原始论文展示大规模资源授权检查，但资源 ACL 也不能单独回答派生内容能否流向另一个域。本文把这些机制结合成 Agent runtime 的工程设计，而非声称某规范已提供完整实现。</p>\n      <p>还要区分两种“信任标签”。工具自由文本的 taint 说明它不能冒充高优先级指令；数据分类/租户标签说明谁能接收其信息。库存 API 的结构化事实可可信地表示库存，仍可能因商业敏感而不得外发。把“来源可信”和“可公开”混为一谈，是另一条常见泄露路径。</p>",
+        "en": "<p>The familiar agent loop appends a tool result to context, then asks the model for another step. Add one more view: the result is not just text. It is a data object with provenance, purpose, and audience restrictions. Yesterday's context packet kept sourceRef and derivedFrom. Those relationships must survive model generation, workspace artifacts, and outbound delivery. A one-sentence summary sourced from A and B does not lose B's label merely because it is short.</p>\n      <p>Denning's classic lattice model uses ordered security labels and joins to reason about propagation. W3C PROV-DM describes entities, activities, and derivation. They supply formal background but do not define tenant policy. NIST SP 800-162 describes attribute-based access decisions using subject, object, action, and environment; AC-4 in SP 800-53 addresses information-flow enforcement. The Zanzibar paper describes authorization checks at large scale, but a resource ACL alone cannot settle whether derived content may move to another domain. The agent-runtime composition here is editorial engineering design, not an implementation prescribed by one specification.</p>\n      <p>There are also two distinct kinds of “trust labels.” Tool-text taint means source prose cannot impersonate high-priority instruction. Classification and tenant labels determine who may receive information. A structured inventory fact can be a trustworthy description of stock and still be commercially restricted from export. Confusing “credible source” with “publicly shareable” is another disclosure path.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "从合法读取到受控流向",
+        "en": "From lawful read to controlled flow"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 305' role='img' aria-labelledby='flow-zh-title flow-zh-desc'><title id='flow-zh-title'>合法读取后的派生数据仍需出站判断</title><desc id='flow-zh-desc'>支持 Agent 分别合法读取租户 A 和 B 的记录，形成跨租户摘要。摘要沿来源链继承 A 与 B 的数据限制。内部调查域可按政策使用，面向租户 A 的邮件是新 sink，不能因为读取成功就允许发送。输出 broker 检查受众、用途、分类和批准。</desc><rect x='14' y='35' width='170' height='75' rx='8' fill='#20312a'/><rect x='14' y='195' width='170' height='75' rx='8' fill='#20312a'/><rect x='242' y='115' width='172' height='100' rx='8' fill='#8e6935'/><rect x='470' y='115' width='126' height='100' rx='8' fill='#9f4939'/><rect x='642' y='115' width='104' height='100' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='66'>租户 A 记录</text><text x='27' y='92'>label A</text><text x='27' y='226'>租户 B 记录</text><text x='27' y='252'>label B</text><text x='255' y='145'>派生摘要</text><text x='255' y='175'>label A∨B</text><text x='483' y='145'>出站门</text><text x='483' y='175'>sink · purpose</text><text x='655' y='145'>内用</text><text x='655' y='175'>外发？</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M184 72H214V147H242'/><path d='M184 232H214V185H242'/><path d='M414 165H470'/><path d='M596 165H642'/></g></svg><figcaption>原创示意：读权限与出站权限分开；派生摘要保留来源限制，跨租户内容不能自动流向单租户收件人。手机可横向滑动。</figcaption></figure>\n      <h3>1. 显式列出身份、域和目的地</h3><p>一次任务至少有请求者、Agent host、工具凭据主体、资源 owner 和最终收件人。记录 task/goalVersion、读取时 principal 与授权用途，不能把 host 的广域支持凭据当作 A 用户的身份。列出数据域：A、B、内部调查域、外部邮件域、持久记忆域与模型服务域。一个 API call 可能同时跨多个域；把 sink 只理解为“发邮件”会漏掉日志、缓存、浏览器、剪贴板和向外部模型传入 prompt。</p>\n      <h3>2. 在源头标字段级来源与限制</h3><p>tool result envelope 给每个可用字段带 sourceRef、tenant、classification、purpose、retention、region、读时授权版本和原始范围。工单标题、客户名称与故障码的敏感度可能不同，不能整个响应粗暴标“可共享”或“全禁”。若后端只给文本，抽取事实时保留原始 span 和不确定标签；没有可靠来源就不把它当可对外事实。读取资格只决定是否可进入受控调查上下文，不决定后续任意复制。</p>\n      <h3>3. 派生内容默认继承来源限制</h3><p>模型把 A 与 B 工单合成摘要、生成表格、翻译或写入 memory 时，产物记录 derivedFrom。只要摘要包含或可推断 B 的信息，其可流向范围不能比 B 的限制更宽。不同租户标签常不可直接线性排序：A-only 与 B-only 的 join 可能是 A+B mixed restricted，只适合内部调查域。不能让模型以“我已经匿名化”为理由自行降级标签；是否真正去标识化需要独立变换和审查，留到下一篇。</p>\n      <h3>4. 把每个输出视作新的 flow edge</h3><p>系统维护 sink registry：邮件域名/收件人、共享文档 ACL、日志可见范围、长期记忆租户、外部模型 endpoint 与数据保留政策。Agent 提出“把调查摘要给 A”时，broker 读取产物 lineage，检查目标受众、用途、资源政策和当前批准。即使 Agent 有 send_email 工具权限，也不能将 B 数据交给 A；工具可调用与这份 payload 可送达是不同谓词。若目的地不合规，返回 blocked 或生成合规替代提案，例如只分享 A 自身的已核验影响。</p>\n      <h3>5. 控制上下文与模型服务本身的出口</h3><p>把受限数据放进 prompt 已是一次传输，可能跨模型服务/地域与保留策略。选择模型前应检查该 endpoint 是否允许接收对应标签；不满足就用本地/获批环境、字段最小化或不调用模型。工具输出中的恶意指令不能改变 sink registry，但即使完全没有 prompt injection，过宽的 prompt 拼接也会泄露。内部 trace 和评测样本同样须按数据域限制可见性，不因为“仅供调试”就放宽。</p>\n      <h3>6. 每个边界留可追溯决策</h3><p>审计记录 source IDs、派生变换、产物 digest/标签、目标 sink、purpose、policy version、批准与拒绝原因、实际 operation ID。若外发被拒，Agent 可继续在内部做分析，不应尝试换一个插件或把同一内容转成截图绕行。若发送 API 超时，仍须核对结果，不能因为后续权限撤销就假装没有发生。first-divergence trace 可定位是读入过宽、摘要丢标签、broker 放行错误还是资源侧越权。</p>\n      <pre><code>result = tool_read(principal, resource, purpose)\nfacts = attach_field_labels_and_source_refs(result)\nartifact = derive_summary(facts)\nartifact.labels = propagate_restrictions(facts)\nfor sink in proposed_sinks(artifact):\n  if not flow_policy_allows(artifact, sink, goal, current_auth):\n    return BLOCKED_OR_REDACTED_PROPOSAL\n  dispatch_with_effect_id(artifact, sink)\n</code></pre>\n      <p>这是本文编辑性数据流控制草图。真实授权服务需要在资源和出口处各自强制执行；模型生成的标签只是待核验提案。</p>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 305' role='img' aria-labelledby='flow-en-title flow-en-desc'><title id='flow-en-title'>Derived data still needs a flow check after a legal read</title><desc id='flow-en-desc'>A support agent legally reads tenant A and B records and creates a cross-tenant summary. The summary inherits restrictions from both sources. An internal investigation domain may use it under policy; an email to tenant A is a new sink and is not authorized by successful reads. An output broker checks audience, purpose, classification, and approval.</desc><rect x='14' y='35' width='170' height='75' rx='8' fill='#20312a'/><rect x='14' y='195' width='170' height='75' rx='8' fill='#20312a'/><rect x='242' y='115' width='172' height='100' rx='8' fill='#8e6935'/><rect x='470' y='115' width='126' height='100' rx='8' fill='#9f4939'/><rect x='642' y='115' width='104' height='100' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='66'>Tenant A data</text><text x='27' y='92'>label A</text><text x='27' y='226'>Tenant B data</text><text x='27' y='252'>label B</text><text x='255' y='145'>Derived summary</text><text x='255' y='175'>label A∨B</text><text x='483' y='145'>Flow gate</text><text x='483' y='175'>sink · purpose</text><text x='655' y='145'>Internal</text><text x='655' y='175'>Email?</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M184 72H214V147H242'/><path d='M184 232H214V185H242'/><path d='M414 165H470'/><path d='M596 165H642'/></g></svg><figcaption>Original explanatory illustration: read and outbound permissions are separate. A derived summary retains source restrictions and cannot automatically flow to a single-tenant recipient. Scroll horizontally on mobile.</figcaption></figure>\n      <h3>1. Name identities, domains, and destinations</h3><p>One task has at least a requester, agent host, tool-credential principal, resource owner, and final recipient. Record task and goalVersion, read-time principal, and authorized purpose. The host's broad support credential is not tenant A's identity. Enumerate domains: A, B, internal investigation, external email, long-lived memory, and model service. One API call can cross several domains. Treating “sink” as email alone misses logs, caches, browser state, clipboard, and prompts sent to an external model.</p>\n      <h3>2. Label source fields and restrictions at ingress</h3><p>Attach sourceRef, tenant, classification, purpose, retention, region, read-time grant version, and original scope to each useful field of a tool result. Ticket title, customer name, and error code may have different sensitivity; labeling the entire response “shareable” or “forbidden” is too coarse. If the backend provides only prose, retain original spans and uncertainty when extracting facts. Without reliable provenance, do not turn an extract into an external fact. Read entitlement permits use in a controlled investigation context, not arbitrary future copying.</p>\n      <h3>3. Make derived content inherit source restrictions</h3><p>When a model combines A and B tickets into a summary, table, translation, or memory, record derivedFrom. If B information remains or can be inferred, the product's permitted destinations cannot be broader than B's. Tenant labels are often incomparable rather than one linear ranking. The join of A-only and B-only can be mixed A+B restricted, suitable only for an internal investigation domain. A model's assertion “I anonymized it” does not authorize downgrading the label. Genuine de-identification needs a separate transformation and review, covered in the next part.</p>\n      <h3>4. Treat each output as a new flow edge</h3><p>Maintain a sink registry for email domains and recipients, shared-document ACLs, log visibility, long-term memory tenant, external-model endpoint, and retention policy. When the agent proposes “send the incident summary to A,” the broker examines artifact lineage, audience, purpose, resource policy, and current approval. Having permission to call send_email does not mean B data may be delivered to A. Tool invocability and payload deliverability are separate predicates. A denied sink yields blocked or a compliant alternative proposal, such as a verified statement about A's own impact only.</p>\n      <h3>5. Treat model context itself as a destination</h3><p>Putting restricted data in a prompt is already a transfer, possibly across model service, region, and retention policy. Before choosing a model endpoint, check whether it may receive the labels. If not, use an approved local environment, minimize fields, or omit the model call. Malicious instructions in a tool result cannot change the sink registry. But even without prompt injection, an overbroad prompt can leak data. Internal traces and eval cases remain bound by domain visibility too; “debug only” is not a permission exception.</p>\n      <h3>6. Keep a traceable decision at each boundary</h3><p>Audit source IDs, transformations, artifact digest and labels, destination, purpose, policy version, approval or denial reason, and actual operation ID. After a denied send, the agent may continue internal analysis; it must not try another plugin or convert the same content to an image to evade the gate. If a send API times out, reconcile it even if authority is revoked later. A first-divergence trace can distinguish an overbroad read, a summary that lost labels, a broker mistake, and resource-side overexposure.</p>\n      <pre><code>result = tool_read(principal, resource, purpose)\nfacts = attach_field_labels_and_source_refs(result)\nartifact = derive_summary(facts)\nartifact.labels = propagate_restrictions(facts)\nfor sink in proposed_sinks(artifact):\n  if not flow_policy_allows(artifact, sink, goal, current_auth):\n    return BLOCKED_OR_REDACTED_PROPOSAL\n  dispatch_with_effect_id(artifact, sink)\n</code></pre>\n      <p>This is editorial information-flow design. Actual authority must be enforced at resource and egress boundaries; model-generated labels are proposals to verify.</p>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "派生标签与流向谓词",
+        "en": "Derived labels and flow predicates"
+      },
+      "html": {
+        "zh": "<p>以 L(d) 表示数据 d 的限制标签，⊔ 表示把多个来源限制组合的 join。若产物 y 由 d₁…dₙ 派生，默认要求：</p><div class='equation'>L(y) ⊒ L(d₁) ⊔ … ⊔ L(dₙ)</div><p>⊒ 表示 y 至少不比来源更宽松；join 是能同时覆盖来源限制的最小上界。租户 A 与 B 的标签不必可直接比较，合成产物可能需要更严格的 mixed 标签。这个形式适合解释“摘要不能自动脱敏”；真实政策还包含用途、地域和保留期限，不可只靠单一密级数字。受控降级需要独立授权与可验证变换，不能由模型自报。</p>\n      <p>对一次从产物 y 到目的地 s 的流向，可把必要门写为：</p><div class='equation'>AllowFlow(y,s) = ReadAuthorized ∧ PurposeAllowed ∧ SinkAccepts(L(y),s) ∧ RecipientAllowed ∧ EffectApproved</div><p>ReadAuthorized 证明输入在原用途下被合法读取；PurposeAllowed 检查当前任务用途；SinkAccepts 检查目的地对该标签的策略；RecipientAllowed 检查实际受众；EffectApproved 是该外部效果所需的特定批准。五者不同权威。读合法只满足第一项，无法推出整体为 true。若任何字段 unknown，应暂停或缩小输出，不用“模型觉得安全”代替。</p>",
+        "en": "<p>Let L(d) be the restriction label on data d, and ⊔ the join combining source restrictions. For output y derived from d₁…dₙ, the default is:</p><div class='equation'>L(y) ⊒ L(d₁) ⊔ … ⊔ L(dₙ)</div><p>⊒ means y is no less restrictive than its sources. The join is the least upper bound that carries both source restrictions. Tenant A and B labels may be incomparable; a combined artifact may need a stricter mixed label. The expression explains why a summary is not automatically declassified. Real policy also includes purpose, region, and retention, which cannot all be reduced to a single secrecy number. Controlled downgrading needs separate authority and a verifiable transformation, not model self-report.</p>\n      <p>For flow from output y to sink s, a necessary gate is:</p><div class='equation'>AllowFlow(y,s) = ReadAuthorized ∧ PurposeAllowed ∧ SinkAccepts(L(y),s) ∧ RecipientAllowed ∧ EffectApproved</div><p>ReadAuthorized records that inputs were lawfully read for an original purpose. PurposeAllowed checks the present task use. SinkAccepts evaluates the destination's policy for L(y). RecipientAllowed checks actual audience. EffectApproved is the specific approval required for this external effect. Different systems are authoritative for these terms. A legal read satisfies only the first conjunct and cannot make the whole expression true. An unknown term means hold or narrow the output rather than trust the model's assurance.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统的影响",
+        "en": "Implications for agent systems"
+      },
+      "html": {
+        "zh": "<h3>能力与延迟</h3><p>来源标签可能让 Agent 少用一个外部模型 endpoint、多做字段最小化或等待合规摘要批准，增加延迟，却避免跨租户泄露。对内部调查，可保留跨域视图；对客户回复，则只用被允许的单租户事实或预先批准的公共事实。能力不是“能看所有数据就能回答所有人”。</p>\n      <h3>可观察性</h3><p>记录每条派生与流向的决策，让团队能回答“客户 A 的这句话来自哪些源”“经过哪次去标识化”“为何允许发送”。拒绝原因要足够具体以指导替代方案，又不能在错误消息里泄露 B 的内容。对用户可解释地报告“跨域细节不能直接共享，正在准备适合当前受众的摘要”。</p>",
+        "en": "<h3>Capability and latency</h3><p>Source labels may make the agent avoid an external model endpoint, minimize fields, or wait for an approved summary, adding latency while preventing cross-tenant disclosure. An internal investigation can retain a cross-domain view; a customer reply uses only permitted same-tenant or separately approved public facts. The capability to read many sources is not the authority to answer every recipient with all of them.</p>\n      <h3>Observability</h3><p>Trace every derivation and flow decision so a team can answer which sources produced a sentence to customer A, which de-identification step ran, and why delivery was allowed. Denial reasons must guide a compliant alternative without exposing B content in the error message. A user-facing status can say, “cross-domain details cannot be shared directly; preparing a version suitable for this audience.”</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<p><strong>标签过粗：</strong>整份工单标最高限制会阻断可分享的公共故障码；逐 token 标记又难实现、审计成本高。字段级或可核验片段级通常是实用边界。无来源片段宁可保持限制，不应默认公开。</p>\n      <p><strong>过度传播：</strong>只要读取 B 就把所有后续产物永久标 B，会降低可用性。若产物确实不依赖 B，应通过明确的 derivedFrom 证据断开血缘；若通过授权聚合/去标识化降低敏感性，必须记录变换、剩余推断风险和批准者。不能仅靠模型说“没有提到 B”。这些受控降级机制是下一篇重点。</p>\n      <p><strong>隐蔽 sink：</strong>日志、trace、向量索引、浏览器页面、第三方模型与复制粘贴都可能成为出口。只守 send_email 会漏掉内容从读到 prompt 的传输。sink registry 要覆盖实际数据路径，并按受众、用途和保留策略配置；新增插件不是自动安全的目的地。</p>\n      <p><strong>身份混淆：</strong>支持 Agent 使用服务凭据读 B，再以 A 用户名义发送摘要，易形成 confused deputy。请求者身份、工具主体与收件人要分开记录，批准不能由模型在自然语言里宣称。权限撤销、租户变更或目标改变时，旧数据的再利用要重新验。</p>\n      <p><strong>评测：</strong>构造 A/B 双租户成对数据，改变 B 的私有字段而保持 A 的可见输入不变；若 A 收件人的输出跟着变化且未经批准，就是可疑跨域流。另测摘要、翻译、表格、日志、记忆和外部模型调用路径，注入合法读取但非法外发、不同用途与审批撤销。评测最终应检查真实 sink 状态，而非只看 Agent 文字是否说“我不会泄露”。</p>",
+        "en": "<p><strong>Labels too coarse:</strong> marking an entire ticket with the highest restriction can block a shareable public error code. Token-level labels are difficult and expensive to audit. Field or verifiable-span granularity is often practical. A fragment without provenance should remain restricted rather than default public.</p>\n      <p><strong>Over-propagation:</strong> marking every later artifact B-restricted forever merely because B was read harms utility. If an artifact truly does not depend on B, explicit derivedFrom evidence can separate it. If authorized aggregation or de-identification lowers sensitivity, record the transformation, residual inference risk, and approver. A model saying “I did not mention B” is insufficient. The next part treats controlled downgrading in depth.</p>\n      <p><strong>Hidden sinks:</strong> logs, traces, vector indexes, browser pages, third-party model prompts, and clipboard can all export content. A guard around send_email misses a transfer from a read into an external prompt. The sink registry covers actual data paths with audience, purpose, and retention policy. A new plugin is not an automatically safe destination.</p>\n      <p><strong>Identity confusion:</strong> a support agent reads B with a service credential, then sends a summary as though acting for A. Record requester, tool principal, and recipient separately to avoid a confused deputy. The model cannot declare approval in prose. Revocation, tenant change, or a revised goal requires a new check before old data is reused.</p>\n      <p><strong>Evaluation:</strong> create paired A/B tenant data in which B's private field changes but A-visible input stays fixed. If the response to A changes without an approved flow, that is suspicious cross-domain influence. Test summary, translation, tables, logs, memory, and external-model routes as well as direct email. Inject legal reads with illegal egress, purpose mismatch, and revoked approval. Judge actual sink state, not only whether the agent's text says “I will not disclose.”</p>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可以带走的判断",
+        "en": "Reusable judgments"
+      },
+      "html": {
+        "zh": "<ol><li>读取授权与向目的地披露是两次独立判断；send_email 可调用不代表 payload 可发送。</li><li>派生摘要、翻译和记忆默认继承来源限制，跨租户 join 往往更严格。</li><li>模型 prompt、日志、缓存和共享文件都是可能的数据 sink，必须纳入流向图。</li><li>模型不能自行降级标签；外发门核对受众、用途、当前政策与具体批准。</li></ol>",
+        "en": "<ol><li>Read authorization and disclosure to a destination are separate decisions. Callable send_email does not make its payload deliverable.</li><li>Derived summaries, translations, and memories inherit source restrictions by default; a cross-tenant join is often more restrictive.</li><li>Model prompts, logs, caches, and shared files are potential data sinks and belong in the flow graph.</li><li>A model cannot declassify its own output. Egress checks audience, purpose, current policy, and specific approval.</li></ol>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "来源与证据边界",
+        "en": "Sources and evidence boundaries"
+      },
+      "html": {
+        "zh": "<ul class='source-list'><li><a href='https://doi.org/10.1145/360051.360056'>Denning, A Lattice Model of Secure Information Flow</a> — 原始安全标签与信息流研究；本文的租户/purpose 合同是扩展。</li><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> — 官方来源与派生模型；来源可追溯不等于授权外发。</li><li><a href='https://csrc.nist.gov/pubs/sp/800/162/upd2/final'>NIST SP 800-162, Attribute Based Access Control</a> — 官方 ABAC 指导；具体数据域与 sink 策略需业务定义。</li><li><a href='https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final'>NIST SP 800-53 Rev. 5, AC-4</a> — 官方信息流执行控制；不是 Agent 的现成实现。</li><li><a href='https://www.usenix.org/conference/atc19/presentation/pang'>Pang et al., Zanzibar</a> — 作者研究大规模资源授权系统；资源 ACL 不自动回答派生数据出站问题。</li></ul><p>链接和标题已于 2026-11-20 核验。字段标签、sink registry、AllowFlow 与跨域案例是本文编辑性工程综合；没有宣称当前产品的具体行为。</p>",
+        "en": "<ul class='source-list'><li><a href='https://doi.org/10.1145/360051.360056'>Denning, A Lattice Model of Secure Information Flow</a> — original research on security labels and information flow; tenant and purpose contracts here are extensions.</li><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> — official provenance and derivation model; traceability does not authorize outbound disclosure.</li><li><a href='https://csrc.nist.gov/pubs/sp/800/162/upd2/final'>NIST SP 800-162, Attribute Based Access Control</a> — official ABAC guidance; business owners define specific domain and sink policy.</li><li><a href='https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final'>NIST SP 800-53 Rev. 5, AC-4</a> — official information-flow-enforcement control, not an off-the-shelf agent implementation.</li><li><a href='https://www.usenix.org/conference/atc19/presentation/pang'>Pang et al., Zanzibar</a> — author research on a large-scale resource authorization system; a resource ACL alone does not settle derived-data egress.</li></ul><p>Links and titles were checked on 2026-11-20. Field labels, the sink registry, AllowFlow, and the cross-domain case are editorial engineering synthesis. No current product behavior is asserted.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "本专题的当前位置",
+        "en": "Where this series stands"
+      },
+      "html": {
+        "zh": "<p><strong>今天已建立：</strong>合法读取并不授权外发。每条工具字段带来源身份、租户、分类、用途和有效范围；派生摘要默认继承限制，跨 A/B 数据可形成 mixed 标签。邮件、日志、记忆、模型 prompt 等都是 sink，broker 按受众、用途、当前权限和特定批准逐边检查。模型产生的“已匿名”不是降级凭证。</p><p><strong>尚未讲完：</strong>哪些聚合、脱敏或人工审查可让高限制数据变成可分享结果？如何证明输出不会通过小样本、独特症状或多次查询重新识别 B？撤销或政策变化怎样传播到已有摘要与缓存？</p><p><strong>下一篇起点：</strong>Cross-Domain Agent Data Flow Internals 2/2 从 A+B mixed 摘要与给 A 的回复请求出发，讲受控降级、最小化披露、推断风险、失效传播与跨域评测；不重讲今天的读取/出站分离与标签 join。</p>",
+        "en": "<p><strong>Established today:</strong> lawful read is not outbound authorization. Tool fields retain source identity, tenant, classification, purpose, and valid scope. Derived summaries inherit restrictions by default, and A/B content can form a mixed label. Email, logs, memory, and model prompts are all sinks; a broker checks audience, purpose, current authority, and specific approval at each flow edge. A model's “anonymized” claim is not a declassification credential.</p><p><strong>Still open:</strong> which aggregation, redaction, or human review steps can produce shareable output from high-restriction data? How can the system detect re-identification through small samples, distinctive symptoms, or repeated queries? How do revocation and policy changes propagate into existing summaries and caches?</p><p><strong>Next starting point:</strong> Part 2 of Cross-Domain Agent Data Flow Internals starts from an A+B mixed summary and a request to reply to A. It covers controlled declassification, data minimization, inference risk, invalidation, and cross-domain evaluation without repeating today's read-versus-egress split or label join.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "continues",
+    "established": {
+      "zh": [
+        "合法读取与外发是独立权限判断，工具可调用不等于派生 payload 可送达目的地",
+        "字段级来源、租户、分类、用途与有效范围沿摘要、翻译、记忆等派生传播；跨域 join 默认保持更严格限制",
+        "邮件、日志、缓存、浏览器和外部模型 prompt 均是 sink，每条流向核对受众、目的、当前政策与批准",
+        "模型自称匿名化不能降级标签；拒绝外发后应提供合规替代并保留可追溯审计"
+      ],
+      "en": [
+        "Lawful read and outbound disclosure are separate permission decisions; a callable tool does not make a derived payload deliverable",
+        "Field-level source, tenant, classification, purpose, and validity propagate through summaries, translations, and memory; cross-domain joins retain stricter restrictions by default",
+        "Email, logs, caches, browsers, and external-model prompts are sinks whose audience, purpose, current policy, and approval need checks",
+        "Model-asserted anonymization cannot downgrade labels; denied egress should yield a compliant alternative and traceable audit"
+      ]
+    },
+    "next": {
+      "zh": "Cross-Domain Agent Data Flow Internals 2/2：从 A+B mixed 摘要及给 A 的回复请求出发，讲受控降级、最小化披露、推断风险、失效传播与跨域评测。",
+      "en": "Cross-Domain Agent Data Flow Internals 2/2: start with an A+B mixed summary and a reply request to A, then cover controlled declassification, minimization, inference risk, invalidation, and cross-domain evaluation."
+    }
+  }
+}

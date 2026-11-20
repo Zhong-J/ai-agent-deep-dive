@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-19",
-  "latestIssueDate": "2026-11-19",
+  "generatedAt": "2026-11-20",
+  "latestIssueDate": "2026-11-20",
   "completedTopics": [
     "multi-tool-context-dependency-closure-taint-evaluation",
     "agent-whole-task-policy-selection-budget-tail-risk",
@@ -54,6 +54,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-20",
+      "topicId": "cross-domain-agent-data-flow-lineage-sink-policy",
+      "seriesId": "cross-domain-agent-data-flow-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-11-19",
       "topicId": "multi-tool-context-dependency-closure-taint-evaluation",
@@ -517,5 +524,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "cross-domain-agent-data-flow-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "合法读取与外发是独立权限判断，工具可调用不等于派生 payload 可送达目的地",
+        "字段级来源、租户、分类、用途与有效范围沿摘要、翻译、记忆等派生传播；跨域 join 默认保持更严格限制",
+        "邮件、日志、缓存、浏览器和外部模型 prompt 均是 sink，每条流向核对受众、目的、当前政策与批准",
+        "模型自称匿名化不能降级标签；拒绝外发后应提供合规替代并保留可追溯审计"
+      ],
+      "en": [
+        "Lawful read and outbound disclosure are separate permission decisions; a callable tool does not make a derived payload deliverable",
+        "Field-level source, tenant, classification, purpose, and validity propagate through summaries, translations, and memory; cross-domain joins retain stricter restrictions by default",
+        "Email, logs, caches, browsers, and external-model prompts are sinks whose audience, purpose, current policy, and approval need checks",
+        "Model-asserted anonymization cannot downgrade labels; denied egress should yield a compliant alternative and traceable audit"
+      ]
+    },
+    "next": {
+      "zh": "Cross-Domain Agent Data Flow Internals 2/2：从 A+B mixed 摘要及给 A 的回复请求出发，讲受控降级、最小化披露、推断风险、失效传播与跨域评测。",
+      "en": "Cross-Domain Agent Data Flow Internals 2/2: start with an A+B mixed summary and a reply request to A, then cover controlled declassification, minimization, inference risk, invalidation, and cross-domain evaluation."
+    }
+  }
 }
