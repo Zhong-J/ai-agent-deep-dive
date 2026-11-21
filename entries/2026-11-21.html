@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>跨租户摘要“已匿名”，Agent 就能发给客户吗？ · AI Agent Deep Dive</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body class="issue-page">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><i></i><span>AI Agent<br><b>Deep Dive</b></span></a>
+    <div class="language-switch" role="group" aria-label="Language">
+      <button type="button" data-set-language="zh" aria-pressed="true">中文</button>
+      <button type="button" data-set-language="en" aria-pressed="false">English</button>
+    </div>
+  </header>
+  <main>
+    <article class="lesson" data-language="zh">
+      <p class="kicker">Cross-Domain Agent Data Flow Internals · 第 2/2 篇</p>
+      <h1>跨租户摘要“已匿名”，Agent 就能发给客户吗？</h1>
+      <p class="dek">从 A+B 混合摘要走到可发布给 A 的版本：先最小化来源，再核验聚合/脱敏的剩余推断风险；降级必须有独立授权、查询预算和可追溯发布凭证。</p>
+      <div class="issue-meta"><span>2026-11-21</span><span>约 20 分钟</span><span>Declassification / Data minimization / Inference risk / Cross-tenant agents / Privacy evaluation</span></div>
+
+      <section class="lesson-section" id="proposition-zh" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>今日命题</h2></header>
+        <div class="section-copy"><p>昨天，支持 Agent 合法读取 A 和 B 的工单，派生的 A+B mixed 摘要不能直接发给 A。今天模型把 B 的名称删掉，写成“另一个客户也在 09:14 出现同样的独特错误”，并自称“已匿名”。如果 A 知道当时只有 B 在该地区上线，仍可能认出 B；若 Agent 连续回答“受影响客户数是 2”和“排除 A 后是 1”，差分也会泄露。删除名字不等于解除来源限制。</p>
+      <p><strong>今日命题：</strong>跨域可分享内容应走受控降级，而非模型自由改写。先问能否只用 A 自己的数据回答；若确需跨域信息，用业务批准的聚合或去标识化变换产生候选，检查小样本、独特属性和重复查询的推断风险，再由独立 policy/owner 对具体受众、用途、有效期和产物版本签发 release receipt。没有凭证的摘要仍保留 A+B 限制。</p>
+      <p>本篇收束 Cross-Domain Agent Data Flow Internals：昨天建立读取与出站分离、字段标签和 sink registry；今天处理降级与发布验证。10 月安全篇已讲 egress broker 和 prompt injection，这里关心<strong>合法资料经“安全摘要”变成可外发内容的证明责任</strong>，并不假设任何产品已经提供自动匿名化。</p>
+      <div class='callout'><strong>核心界限：</strong>“没有姓名”只是一个文本特征；“对这个受众不可识别且获准发布”是另一项需要证据的决策。</div></div>
+      </section>
+      <section class="lesson-section" id="connection-zh" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>从标签继承到受控降级</h2></header>
+        <div class="section-copy"><p>上一篇用 L(y) ⊒ L(A)⊔L(B) 表示派生摘要默认不比来源更宽松，并把邮件、日志、记忆与模型 prompt 都当 sink。今天要回答如何有条件解除部分限制：<em>来源最小化</em>是完全不用 B 数据；<em>变换降级</em>是确实从 A+B 产生可共享的统计或描述；<em>政策发布</em>是针对特定受众允许该版本外发。这三步不能互相代替。只用 A 数据通常最简单；若摘要仍依赖 B，模型删几个词不能把血缘断掉。</p>
+      <p>NIST SP 800-188 官方去标识化指导强调直接标识符以外的重识别风险与治理。NIST SP 800-226 说明差分隐私保证的评估有明确机制与假设；它不意味着任意 LLM 摘要自动满足差分隐私。Narayanan 与 Shmatikov 的 Netflix 数据集去匿名化研究展示稀疏、可链接记录可能重新识别。它们提供风险机制与报告依据，不提供本案例的神奇“安全阈值”。</p>
+      <p>W3C PROV 的派生链帮助保存 release artifact 从哪些 source 和 transform 而来；AC-4 信息流控制要求在边界实施策略。出站批准必须针对实际 bytes 或规范化内容摘要，否则模型在审批后修改措辞、插入 B 的特征，旧凭证就不再覆盖新效果。批准并不能回头证明变换本身安全；降级检查与受众许可各有责任。</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-zh" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>可分享版本的受控生成链</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 760 310' role='img' aria-labelledby='declass-zh-title declass-zh-desc'><title id='declass-zh-title'>混合来源产物的受控发布路径</title><desc id='declass-zh-desc'>A+B 混合摘要默认留在内部域。回复 A 时先构造只依赖 A 的最小事实，或用经批准的聚合/脱敏变换生成候选发布物。独立检查推断风险、受众、用途、政策版本和重复查询，再签发具体 release receipt。若检查失败，继续内部调查或请求审批，不能直接发送原摘要。</desc><rect x='14' y='100' width='174' height='106' rx='8' fill='#20312a'/><rect x='230' y='100' width='172' height='106' rx='8' fill='#8e6935'/><rect x='444' y='100' width='154' height='106' rx='8' fill='#9f4939'/><rect x='640' y='100' width='106' height='106' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='137'>A+B 混合摘要</text><text x='27' y='166'>默认仅内部</text><text x='243' y='137'>最小化候选</text><text x='243' y='166'>A-only / aggregate</text><text x='457' y='137'>独立降级门</text><text x='457' y='166'>risk · purpose</text><text x='653' y='137'>给 A</text><text x='653' y='166'>receipt ID</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 153H230'/><path d='M402 153H444'/><path d='M598 153H640'/></g><text x='126' y='54' fill='#35433b' font-size='16' font-family='sans-serif'>缩短文本 ≠ 已匿名；多次回答可能反推出 B</text><text x='159' y='260' fill='#35433b' font-size='15' font-family='sans-serif'>拒绝发布时保留合规替代，不改写来源标签</text></svg><figcaption>原创示意：模型提出可分享版本，独立降级门决定能否释放；已发送内容不能靠撤销缓存抹去。手机可横向滑动。</figcaption></figure>
+      <h3>1. 先选最小来源，而不是先“匿名化”</h3><p>对 A 的问题“我的搜索是否受影响”，先从 A 的遥测与工单回答，避免把 B 放进生成上下文。若跨租户对照确有必要，例如确认是否为平台范围，分离内部分析结论与对外语句：内部可知道 A+B，外部可说“我们正在调查更广泛的影响”，前提是该措辞经发布政策允许且不暗示未经证实的数量。来源最小化减少后续去标识化负担，也减少外部模型 prompt、日志和缓存的暴露。</p>
+      <h3>2. 将降级定义成可复现的变换</h3><p>若要发布跨域统计，定义输入数据集版本、过滤条件、输出粒度、最小群体规模、时间桶、噪声机制（若使用）、允许受众和用途。自由文本“把 B 隐去”无法验证。变换服务产出 candidate artifact 与 manifest：source IDs、代码/模型版本、参数、输出 digest、覆盖、误差与 residual risk。模型可帮助起草，但不能自己签发“已脱敏”标签。若变换删除直接姓名却保留独特时间和错误签名，review 应拒绝降级。</p>
+      <h3>3. 检查推断和重复查询风险</h3><p>小样本统计可能暴露个体；多个看似安全的回复组合后也可能通过差分推断 B。release ledger 记录对某受众已发出的相关统计、范围、时间窗和查询预算。候选新回复与历史发布一起检查：它是否让 A 通过相减、交叉筛选或外部知识推断 B？固定阈值如“至少 5 个客户”只是启发式，不能保证安全。若系统声称差分隐私，需具体机制、敏感度、参数和组合预算；否则不要贴 DP 标签。</p>
+      <h3>4. 独立批准具体版本与 sink</h3><p>数据 owner 或指定 policy evaluator 核对变换 manifest、残余风险与当前授权，签发针对 artifact digest、受众 A、邮件渠道、用途“故障沟通”、到期时间和 policyVersion 的 release receipt。批准范围可以收窄或拒绝；Agent 没有自批权。若客户联系人、附件、措辞或目的地改变，重新跑发布门。release receipt 表示这个版本在这些条件下可流转，不是 B 原始记录或未来任意摘要的通用解禁。</p>
+      <h3>5. 处理缓存、撤销与已发内容</h3><p>来源权限、分类或政策变化时，沿 derivedFrom 找到候选摘要、memory、搜索索引、外部模型缓存与未发送草稿，撤销其未来使用资格并重评发布凭证。已经送达邮件不能靠删除缓存撤回；系统需保留 operation ID、收件范围、补救 owner 和必要的更正沟通。若撤销传播未完成，broker 仍按当前 policy epoch 阻断旧 receipt。未知发送状态先读回，不因“新版本已禁用”就假设从未披露。</p>
+      <h3>6. 在实际 sink 上验收</h3><p>构造 A/B 成对测试：固定 A 的可见事实，只改 B 的私有名称、独特症状或时间戳；若给 A 的回复变化且没有获批跨域输出，定位泄露路径。再测小计数、重复统计查询、翻译/截图绕行、外部模型 prompt、日志和长期记忆。检查真实发送内容与 release digest 是否一致、接收者是否正确、被拒后是否仍由别的插件外发。模型只说“我没有泄露”不是通过；授权流向与实际 sink 状态才是终态证据。</p>
+      <pre><code>candidate = minimize_sources(request, audience)
+if candidate.depends_on_restricted_domains:
+  (candidate, manifest) = controlled_transform(candidate)
+  if not inference_review(candidate, prior_releases): return BLOCKED
+receipt = independent_release_gate(candidate.digest, audience, purpose, sink)
+if not receipt.current: return HOLD
+return dispatch_and_verify_exact_artifact(candidate, receipt)
+</code></pre>
+      <p>这是本文编辑性降级与发布草图；真实隐私保证需由具体变换、政策和测量支持，不能从伪代码推导出来。</p></div>
+      </section>
+      <section class="lesson-section" id="mathematics-zh" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>不泄露测试与重复发布</h2></header>
+        <div class="section-copy"><p>设 D_A 是 A 可见资料，D_B 是 B 的私有资料，Out_A 是给 A 的输出。若这次没有任何获批跨域降级，理想的非干扰条件是：</p><div class='equation'>Out_A(D_A,D_B¹) = Out_A(D_A,D_B²)</div><p>D_B¹、D_B² 只在 B 的私有事实不同，A 的输入、目标和当前政策完全相同。等式表示改变 B 不应改变 A 的可观察输出；若改变了，需要查是否有泄露或未声明的依赖。真实生成模型可能因随机性产生不同措辞，评测应固定种子或比较可见语义/事实，而不是把所有字节差异都当泄露。若已授权发布某一跨域聚合，则等式的例外必须由该具体 release contract 明确列出。</p>
+      <p>对统计发布，单次检查也不够。设第 i 次获批发布的隐私消耗为 εᵢ；在确实采用满足差分隐私条件的机制、且使用基本组合规则时，总预算可上界为：</p><div class='equation'>ε_total ≤ Σᵢ εᵢ</div><p>εᵢ 是该机制在既定邻接关系和受众下的隐私参数，越小通常意味着更强保护；总预算记录重复查询的累积影响。这个式子不能用于普通 LLM 摘要：没有明确随机机制、敏感度和证明，就没有可相加的 ε。工程意义是 release ledger 必须记跨多次答复的累计信息，而非每次单独说“看起来安全”。</p></div>
+      </section>
+      <section class="lesson-section" id="implications-zh" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>对 Agent 系统的影响</h2></header>
+        <div class="section-copy"><h3>能力与延迟</h3><p>最小化来源让很多客户回复不必触碰跨域降级门，速度也可能更快。确需平台范围结论时，变换与审批增加延迟，但降低重识别和越权外发风险。Agent 可在内部继续调查、对客户报告其自身已核验影响，并明确跨域细节暂不能分享，不必在“泄露全部”与“完全不答”之间二选一。</p>
+      <h3>可观察性与治理</h3><p>release receipt 把哪份输入、哪段变换、哪个版本和受众连接起来；未来权限或政策变化可沿来源链找到受影响缓存。团队能区分“被批准的公共统计”“只适用于 A 的事实”和“仍受 B 限制的内部摘要”。审批不应被当作一次性永久解禁。</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-zh" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>取舍与失败模式</h2></header>
+        <div class="section-copy"><p><strong>过度阻断：</strong>混合标签若永远无法降级，系统会不必要地拒绝有价值的公共事实。明确的 A-only 路线、经过审核的聚合和经 owner 发布的公告可解锁用途；但降级是新决定，不是压缩器默认行为。</p>
+      <p><strong>伪匿名：</strong>删姓名、替换租户编号或说“某客户”仍可能因时间、区域和错误签名被识别。固定 k 门槛也不能防止外部知识与重复查询。受众不同，推断风险不同：内部故障经理和客户 A 的可用背景并不相同。</p>
+      <p><strong>隐私机制误用：</strong>给普通摘要贴 DP 标签会制造虚假的数学保证。真正的差分隐私发布需定义相邻数据集、敏感度、随机机制、参数和组合预算；小规模故障排查可能不适合直接发布噪声统计。若业务要准确个案解释，可能更适合 A-only 事实与人工发布审批。</p>
+      <p><strong>撤销延迟与已发送内容：</strong>缓存、记忆和外部模型副本无法保证瞬时收回。撤权后应停止新用途、找到已生成衍生物、重评 receipt，并对已发内容保留补救责任。不能说“索引删掉了，所以客户没看到”。</p>
+      <p><strong>发布评测：</strong>除了 A/B 非干扰成对轨迹，还要测独特事件、连续差分查询、截图/翻译绕行、审批后内容改变、policyVersion 更新、模型 prompt 与日志泄露。按 sink 检查真实输出、artifact digest、收件者与累计预算；模型的安全措辞不能替代资源侧结果。关键越界事件应是硬失败，聚合平均分再高也不能掩盖。</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-zh" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>可以带走的判断</h2></header>
+        <div class="section-copy"><ol><li>先尝试 A-only 最小来源；跨域信息确有必要时才进入受控变换与审批。</li><li>“无姓名”不等于不可识别；小群体、独特特征和重复查询会暴露 B。</li><li>release receipt 绑定具体产物、受众、用途、期限与政策版本，模型不得自批降级。</li><li>撤权阻断未来流向，已发送内容仍需核对和补救；评测看真实 sink 状态。</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-zh" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>来源与证据边界</h2></header>
+        <div class="section-copy"><ul class='source-list'><li><a href='https://csrc.nist.gov/pubs/sp/800/188/final'>NIST SP 800-188, De-Identifying Government Datasets</a> — 官方去标识化技术与治理指导；不能直接给本案例一个通用安全阈值。</li><li><a href='https://csrc.nist.gov/pubs/sp/800/226/final'>NIST SP 800-226, Guidelines for Evaluating Differential Privacy Guarantees</a> — 官方差分隐私评估指导；普通 LLM 摘要不自动有 ε 保证。</li><li><a href='https://arxiv.org/abs/cs/0610105'>Narayanan &amp; Shmatikov, How To Break Anonymity of the Netflix Prize Dataset</a> — 作者研究稀疏记录可链接重识别的风险；结果属于其数据环境。</li><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> — 官方来源/派生模型；本文以它记录降级变换 lineage。</li><li><a href='https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final'>NIST SP 800-53 Rev. 5, AC-4</a> — 官方信息流执行控制；release receipt 是本文工程扩展。</li></ul><p>链接和标题已于 2026-11-21 核验。降级 manifest、release ledger、非干扰测试和发布门属于编辑性工程综合；没有宣称当前产品实现这些机制。</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-zh" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>专题收束与下一站</h2></header>
+        <div class="section-copy"><p><strong>本专题已讲完：</strong>1/2 建立读取与出站分离、字段级来源/租户/用途标签及派生继承，识别邮件、日志、缓存、记忆与模型 prompt 等 sink。2/2 先用单域数据最小化，再对必要跨域统计执行可复现的聚合/脱敏、推断风险和重复查询检查，由独立 owner 给具体产物与受众签发 release receipt；撤权影响未来流向，已发效果仍要核对。两篇共同回答：合法读到的数据只有经过适当变换与新流向授权才能分享。</p><p><strong>尚未讲完：</strong>本专题的标签传播、受控降级和跨域发布评测链已闭合。具体分类体系、允许受众及隐私阈值由实际组织政策决定，本文不虚构。</p><p><strong>下一篇起点：</strong>回到系统路线，选择独立问题：Agent 如何在模型与工具行为不确定时提供可复现的执行证据，以及哪些状态必须固定、哪些外部变化只能记录不能重放？明天不续讲本专题。</p></div>
+      </section>
+    </article>
+    <article class="lesson" data-language="en" hidden>
+      <p class="kicker">Cross-Domain Agent Data Flow Internals · Part 2 of 2</p>
+      <h1>The Cross-Tenant Summary Is “Anonymous.” May the Agent Send It?</h1>
+      <p class="dek">Move from an A+B mixed summary toward a version releasable to A: minimize sources first, check residual inference risk after aggregation or de-identification, and require independent authority, query limits, and a traceable release receipt.</p>
+      <div class="issue-meta"><span>2026-11-21</span><span>20 min read</span><span>Declassification / Data minimization / Inference risk / Cross-tenant agents / Privacy evaluation</span></div>
+
+      <section class="lesson-section" id="proposition-en" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>Today's proposition</h2></header>
+        <div class="section-copy"><p>Yesterday a support agent lawfully read A and B tickets, but their mixed A+B summary could not simply be sent to A. Today the model removes B's name and writes, “another customer had the same distinctive error at 09:14,” calling it “anonymized.” A may know that only B launched in that region at that time. The detail can still identify B. If the agent repeatedly answers “two customers were affected” and “one excluding A,” differencing can disclose the same fact. Removing a name does not remove source restrictions.</p>
+      <p><strong>Today's proposition:</strong> cross-domain sharing needs controlled declassification, not free-form model rewriting. Ask first whether A-only information answers the question. If cross-domain information is necessary, apply a business-approved aggregation or de-identification transformation to produce a candidate. Check inference risk from small groups, distinctive attributes, and repeated queries. Then an independent policy or owner issues a release receipt bound to the exact artifact, audience, purpose, and lifetime. Without that receipt, the summary retains its A+B restriction.</p>
+      <p>This closes Cross-Domain Agent Data Flow Internals. Yesterday separated reads from egress and introduced field labels and sink registration; today covers downgrading and release verification. October's safety articles already covered egress brokers and prompt injection. The question here is <strong>who proves that a legitimate source became a safe and authorized customer-facing output.</strong> No existing product is assumed to perform automatic anonymization.</p>
+      <div class='callout'><strong>Boundary:</strong> “contains no name” is a textual property. “Cannot identify someone to this audience and may be released” is a separate, evidence-bearing decision.</div></div>
+      </section>
+      <section class="lesson-section" id="connection-en" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>From inherited labels to controlled declassification</h2></header>
+        <div class="section-copy"><p>Part 1 used L(y) ⊒ L(A)⊔L(B) to say that derived summaries are no less restricted than their sources by default, and treated email, logs, memory, and model prompts as sinks. This part asks when a restriction can be relaxed. <em>Source minimization</em> means not using B data at all. <em>Transformational declassification</em> produces a shareable statistic or description from A+B data. <em>Policy release</em> authorizes one version for a specific audience. None substitutes for the others. A-only data is often the simplest route; if an artifact still depends on B, deleting a few words does not erase its lineage.</p>
+      <p>NIST SP 800-188 gives official de-identification guidance, including governance and re-identification risks beyond direct identifiers. NIST SP 800-226 explains how differential-privacy claims require a defined mechanism and assumptions; it does not make an arbitrary LLM summary differentially private. Narayanan and Shmatikov's work on Netflix data illustrates how sparse linkable records may be reidentified. These sources identify risks and evaluation responsibilities, not a magic safe threshold for this case.</p>
+      <p>W3C PROV supports retaining which sources and transformations produced a release artifact; AC-4 information-flow controls motivate enforcement at the boundary. An outbound approval should bind the actual bytes or a canonical content digest. If the model changes wording after review and inserts a feature of B, the old receipt no longer covers the effect. Approval also does not retroactively prove the transformation safe; transformation review and audience permission have separate owners.</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-en" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>A controlled path to a shareable version</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 760 310' role='img' aria-labelledby='declass-en-title declass-en-desc'><title id='declass-en-title'>Controlled release path for mixed-source artifacts</title><desc id='declass-en-desc'>An A+B mixed summary remains internal by default. To reply to A, construct minimum A-only facts or a candidate produced by approved aggregation or de-identification. An independent gate checks inference risk, audience, purpose, policy version, and repeated queries before issuing a specific release receipt. Failure leaves the mixed summary internal and requires another route or approval.</desc><rect x='14' y='100' width='174' height='106' rx='8' fill='#20312a'/><rect x='230' y='100' width='172' height='106' rx='8' fill='#8e6935'/><rect x='444' y='100' width='154' height='106' rx='8' fill='#9f4939'/><rect x='640' y='100' width='106' height='106' rx='8' fill='#20312a'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='137'>A+B mixed data</text><text x='27' y='166'>Internal only</text><text x='243' y='137'>Minimized draft</text><text x='243' y='166'>A-only / aggregate</text><text x='457' y='137'>Release gate</text><text x='457' y='166'>risk · purpose</text><text x='653' y='137'>To A</text><text x='653' y='166'>receipt ID</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 153H230'/><path d='M402 153H444'/><path d='M598 153H640'/></g><text x='126' y='54' fill='#35433b' font-size='16' font-family='sans-serif'>Shorter prose is not anonymity; repeated answers may reveal B</text><text x='159' y='260' fill='#35433b' font-size='15' font-family='sans-serif'>A denied release keeps compliant alternatives and source labels</text></svg><figcaption>Original explanatory illustration: the model proposes a shareable version, while an independent declassification gate decides release. Cache revocation cannot unsend content. Scroll horizontally on mobile.</figcaption></figure>
+      <h3>1. Minimize sources before “anonymizing”</h3><p>For A's question “Was my search affected?”, begin with A's telemetry and ticket. Keep B out of the generation context if A-only facts suffice. If cross-tenant comparison is genuinely needed to assess platform scope, separate internal analysis from customer-facing wording. An internal conclusion may use A+B, while an external statement such as “we are investigating wider impact” still needs release-policy approval and must not imply an unverified count. Minimization reduces the burden of later de-identification and reduces exposure in model prompts, logs, and caches.</p>
+      <h3>2. Define declassification as a reproducible transformation</h3><p>For cross-domain statistics, specify input-dataset version, filters, output granularity, minimum group size, time bucket, noise mechanism if any, allowed audience, and purpose. “Hide B” in free text is not a testable transform. A transformation service returns a candidate artifact and manifest with source IDs, code or model version, parameters, output digest, coverage, error, and residual risk. The model may draft wording but cannot sign its own “de-identified” label. Removing a direct name while retaining a distinctive timestamp and error signature should fail review.</p>
+      <h3>3. Check inference and repeated-query risk</h3><p>A small-group statistic can disclose an individual. Multiple individually innocuous responses can combine through differencing to reveal B. A release ledger records related statistics already sent to an audience, their scopes, time windows, and query budget. Evaluate the new candidate together with prior releases: can A subtract, cross-filter, or combine with public knowledge to infer B? A fixed “at least five customers” threshold is only a heuristic, not a guarantee. A differential-privacy claim requires an actual mechanism, sensitivity, parameters, and composition budget. Otherwise do not use the DP label.</p>
+      <h3>4. Approve an exact version and sink independently</h3><p>A data owner or policy evaluator reviews the transformation manifest, residual risk, and current authorization, then issues a release receipt bound to artifact digest, audience A, email channel, incident-communication purpose, expiry, and policyVersion. They may narrow or deny the scope; the agent cannot approve itself. A changed customer contact, attachment, wording, or destination reopens the gate. The receipt allows that version under those conditions. It is not a blanket declassification of B's records or of every future summary.</p>
+      <h3>5. Handle caches, revocation, and already-delivered content</h3><p>When source authority, classification, or policy changes, follow derivedFrom links to candidate summaries, memory, search indexes, external-model caches, and unsent drafts. Revoke their future-use eligibility and reevaluate release receipts. A delivered email cannot be recalled by deleting a cache. Retain its operation ID, recipient scope, repair owner, and any corrective communication. During propagation lag, the broker still blocks a stale receipt against the current policy epoch. Reconcile an unknown send outcome instead of assuming that disabling the new version means no disclosure occurred.</p>
+      <h3>6. Test the actual sinks</h3><p>Build A/B paired cases: hold A-visible facts fixed while changing B's private name, distinctive symptom, or timestamp. If the reply to A changes without an approved cross-domain release, investigate the flow. Test small counts, repeated statistical queries, translation or screenshot detours, external-model prompts, logs, and long-lived memory. Verify that bytes sent match the approved release digest, recipients are correct, and a denied send cannot escape through another plugin. The model saying “I did not disclose” is not a pass. Authorized flow and actual sink state are terminal evidence.</p>
+      <pre><code>candidate = minimize_sources(request, audience)
+if candidate.depends_on_restricted_domains:
+  (candidate, manifest) = controlled_transform(candidate)
+  if not inference_review(candidate, prior_releases): return BLOCKED
+receipt = independent_release_gate(candidate.digest, audience, purpose, sink)
+if not receipt.current: return HOLD
+return dispatch_and_verify_exact_artifact(candidate, receipt)
+</code></pre>
+      <p>This is an editorial declassification and release sketch. An actual privacy guarantee requires a specific transformation, policy, and measurement; it cannot be inferred from pseudocode.</p></div>
+      </section>
+      <section class="lesson-section" id="mathematics-en" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>Noninterference tests and repeated releases</h2></header>
+        <div class="section-copy"><p>Let D_A be facts A may see, D_B B's private facts, and Out_A the response delivered to A. Without any approved cross-domain declassification, an ideal noninterference condition is:</p><div class='equation'>Out_A(D_A,D_B¹) = Out_A(D_A,D_B²)</div><p>D_B¹ and D_B² differ only in B-private facts; A's inputs, goal, and current policy are unchanged. Changing B should not change what A observes. A difference requires investigation for leakage or an undeclared dependency. A generative model may vary wording at random, so tests should fix sampling or compare visible semantics and facts rather than call every byte difference a leak. If a specific cross-domain aggregate has been approved, the exception to the equality must be named by that release contract.</p>
+      <p>A statistical release also cannot be judged one query at a time. Let εᵢ be the privacy cost of approved release i. If the system genuinely uses mechanisms satisfying differential-privacy assumptions and basic composition applies, an upper budget is:</p><div class='equation'>ε_total ≤ Σᵢ εᵢ</div><p>εᵢ is the privacy parameter for that mechanism under a defined neighboring-dataset relation and audience; smaller values generally offer stronger protection. The total tracks cumulative information from repeated queries. The equation does not apply to ordinary LLM summaries. Without a defined randomized mechanism, sensitivity, and proof, there are no meaningful ε values to add. The engineering point is to account for information across releases rather than declare each response “looks safe” in isolation.</p></div>
+      </section>
+      <section class="lesson-section" id="implications-en" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>Implications for agent systems</h2></header>
+        <div class="section-copy"><h3>Capability and latency</h3><p>Source minimization lets many customer replies avoid cross-domain declassification entirely and may be faster. When platform-wide conclusions are needed, transformation and review add latency but reduce re-identification and unauthorized delivery risk. The agent can continue internal investigation, report A's verified impact to A, and say cross-domain details cannot yet be shared. The choice is not between leaking everything and answering nothing.</p>
+      <h3>Observability and governance</h3><p>A release receipt links inputs, transformation, version, and audience; later authority or policy changes can follow lineage to affected caches. A team can distinguish an approved public statistic, an A-only fact, and an internal summary still restricted by B. One approval is not permanent blanket clearance.</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-en" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>Trade-offs and failure modes</h2></header>
+        <div class="section-copy"><p><strong>Overblocking:</strong> if a mixed label can never be downgraded, useful public facts will be unnecessarily suppressed. An A-only route, reviewed aggregation, or owner-issued public notice can enable a legitimate use. Downgrading is a new decision, not a compressor default.</p>
+      <p><strong>False anonymity:</strong> removing a name, replacing a tenant ID, or saying “another customer” can remain identifying through time, region, and error signature. A fixed k threshold cannot prevent linkage to public knowledge or repeated queries. Inference risk is audience-dependent: an internal incident manager and tenant A do not have the same background information.</p>
+      <p><strong>Privacy mechanism misuse:</strong> putting a DP label on ordinary prose creates a false mathematical guarantee. A real differential-privacy release defines neighboring datasets, sensitivity, randomized mechanism, parameters, and composition budget. Noisy statistics may not suit a small incident investigation that needs exact case explanation. A-only facts and human release approval can be a better fit.</p>
+      <p><strong>Revocation lag and delivered content:</strong> caches, memories, and external-model copies cannot be guaranteed to vanish instantly. After revocation, stop new uses, find derived artifacts, reevaluate receipts, and retain repair ownership for delivered content. “The index entry was removed” does not prove a customer never saw it.</p>
+      <p><strong>Release evaluation:</strong> alongside paired A/B noninterference trajectories, test distinctive events, repeated differencing queries, screenshot and translation detours, changed content after approval, new policyVersion, model-prompt exposure, and log leakage. Check actual output at every sink, artifact digests, recipients, and cumulative budget. Safe-sounding model prose is no substitute for resource-side outcomes. A consequential cross-domain leak is a hard failure regardless of aggregate score.</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-en" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>Reusable judgments</h2></header>
+        <div class="section-copy"><ol><li>Try A-only source minimization first; use a controlled transform and approval only when cross-domain information is necessary.</li><li>“No name” does not mean unidentifiable. Small groups, distinctive features, and repeated queries can reveal B.</li><li>A release receipt binds artifact, audience, purpose, expiry, and policy version. The model cannot approve its own declassification.</li><li>Revocation blocks future flows while delivered content still needs reconciliation and repair. Evaluate actual sink state.</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-en" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>Sources and evidence boundaries</h2></header>
+        <div class="section-copy"><ul class='source-list'><li><a href='https://csrc.nist.gov/pubs/sp/800/188/final'>NIST SP 800-188, De-Identifying Government Datasets</a> — official technical and governance guidance, not a universal safety threshold for this case.</li><li><a href='https://csrc.nist.gov/pubs/sp/800/226/final'>NIST SP 800-226, Guidelines for Evaluating Differential Privacy Guarantees</a> — official DP evaluation guidance; ordinary LLM summaries do not automatically carry ε guarantees.</li><li><a href='https://arxiv.org/abs/cs/0610105'>Narayanan &amp; Shmatikov, How To Break Anonymity of the Netflix Prize Dataset</a> — author research on linking sparse records for re-identification, bounded by its data setting.</li><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> — official provenance and derivation model used here for transformation lineage.</li><li><a href='https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final'>NIST SP 800-53 Rev. 5, AC-4</a> — official information-flow-enforcement control; the release receipt is an engineering extension.</li></ul><p>Links and titles were checked on 2026-11-21. Declassification manifests, release ledgers, noninterference tests, and release gates are editorial engineering synthesis. No current product is claimed to implement them.</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-en" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>Series close and next stop</h2></header>
+        <div class="section-copy"><p><strong>Completed in this series:</strong> Part 1 separated read from outbound permission, attached field-level provenance, tenant, and purpose labels, propagated them through derivation, and registered sinks such as email, logs, caches, memory, and model prompts. Part 2 first minimized sources, then used reproducible aggregation or de-identification for necessary cross-domain statistics, checked inference and repeated-query risk, and required an independent owner to issue a release receipt for the exact artifact and audience. Revocation affects future flow; delivered effects still need readback. The combined rule is that lawfully read data becomes shareable only through an appropriate transformation and a new authorization for its destination.</p><p><strong>Still open:</strong> label propagation, controlled downgrading, and cross-domain release evaluation are complete in this series. Specific classification taxonomies, audiences, and privacy thresholds belong to actual organizational policy and are not invented here.</p><p><strong>Next starting point:</strong> return to the systematic path with a separate question: with uncertain model and tool behavior, how can an agent provide reproducible execution evidence? Which state must be pinned, and which external changes can only be recorded rather than replayed? This series does not continue tomorrow.</p></div>
+      </section>
+    </article>
+    <nav class="issue-nav" aria-label="Issue navigation"><a href="2026-11-20.html"><span data-nav-language="zh">← 上一篇</span><span data-nav-language="en" hidden>← Previous</span><strong data-nav-language="zh">Agent 合法读到的数据，为什么仍不能写进下一封邮件？</strong><strong data-nav-language="en" hidden>Why Can’t an Agent Email Data It Was Allowed to Read?</strong></a><span></span></nav>
+  </main>
+  <script>
+(() => {
+  const switches = [...document.querySelectorAll("[data-set-language]")];
+  const lessons = [...document.querySelectorAll(".lesson[data-language]")];
+  function nearestSectionId() {
+    const visibleLesson = lessons.find((lesson) => !lesson.hidden);
+    if (!visibleLesson) return null;
+    const sections = [...visibleLesson.querySelectorAll("[data-section-id]")];
+    return sections.sort((a, b) => Math.abs(a.getBoundingClientRect().top - 100) - Math.abs(b.getBoundingClientRect().top - 100))[0]?.dataset.sectionId || null;
+  }
+  function setLanguage(language, preserveSection = false) {
+    if (!lessons.length) return;
+    const sectionId = preserveSection ? nearestSectionId() : null;
+    lessons.forEach((lesson) => { lesson.hidden = lesson.dataset.language !== language; });
+    document.querySelectorAll("[data-nav-language]").forEach((node) => { node.hidden = node.dataset.navLanguage !== language; });
+    switches.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.setLanguage === language)));
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    try { localStorage.setItem("ai-agent-deep-dive-language", language); } catch {}
+    if (sectionId) lessons.find((lesson) => lesson.dataset.language === language)?.querySelector('[data-section-id="' + sectionId + '"]')?.scrollIntoView({ block: "start" });
+  }
+  if (lessons.length) {
+    let stored = "zh";
+    try { stored = localStorage.getItem("ai-agent-deep-dive-language") || "zh"; } catch {}
+    setLanguage(stored === "en" ? "en" : "zh");
+    switches.forEach((button) => button.addEventListener("click", () => setLanguage(button.dataset.setLanguage, true)));
+  }
+  const search = document.querySelector("#archive-search");
+  if (search) search.addEventListener("input", () => {
+    const query = search.value.trim().toLowerCase();
+    const cards = [...document.querySelectorAll("[data-searchable]")];
+    let visible = 0;
+    cards.forEach((card) => { card.hidden = Boolean(query) && !card.dataset.searchable.includes(query); if (!card.hidden) visible += 1; });
+    const empty = document.querySelector(".empty-state");
+    if (empty) empty.hidden = visible !== 0;
+  });
+})();
+</script>
+</body>
+</html>
