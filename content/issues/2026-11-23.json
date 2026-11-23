@@ -1,0 +1,153 @@
+{
+  "date": "2026-11-23",
+  "slug": "agent-audit-bundle-integrity-first-divergence-versioning",
+  "readingMinutes": 20,
+  "topicId": "agent-audit-bundle-integrity-first-divergence-versioning",
+  "series": {
+    "id": "agent-reproducible-execution-internals",
+    "title": {
+      "zh": "Agent Reproducible Execution Internals",
+      "en": "Agent Reproducible Execution Internals"
+    },
+    "part": 2,
+    "total": 2,
+    "complete": true
+  },
+  "title": {
+    "zh": "有 Trace 和 Hash，怎样证明 Agent 昨天到底做了什么？",
+    "en": "With a Trace and Hash, How Do We Establish What the Agent Actually Did?"
+  },
+  "dek": {
+    "zh": "从含 volatile 边界的 run manifest 构造受控 audit bundle：校验记录完整性与关键事件覆盖，按因果关系找第一分歧，区分跨版本条件复现与真实效果证明。",
+    "en": "Build an access-controlled audit bundle from a manifest with volatile boundaries. Check integrity and expected event coverage, locate the first causal divergence, and separate conditional cross-version replay from proof of real effects."
+  },
+  "tags": [
+    "Agent audit",
+    "Reproducibility",
+    "Provenance",
+    "First divergence",
+    "Release evidence"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>昨天定义了四种不同主张：查看历史记录、桩重放控制流、隔离重执行、当前世界新任务。现在一次事故的 trace 有完整 hash chain，桩重放也得到相同终态，但客户说根本没收到邮件。可能是资源侧投递回执从未保存，也可能是审计包省略了一次人工修改。hash 证明已有字节未被调包，不能证明关键事件全都存在，更不能让模型替邮件服务证明送达。</p>\n      <p><strong>今日命题：</strong>可审计的 Agent run bundle 至少同时回答四件事：记录是否完整且未被改写，敏感原文是否能由有权者读回，重执行与历史在哪个可比较边界首次分歧，终态是否有独立的权威证据。每项都有不同 failure mode。若模型或工具无法精确固定，应明确说“在这些固定条件下行为相同”，不能声称“字节级再现”或“昨天真实效果已证明”。</p>\n      <p>10 月 2 日已讲过 trace、claim/evidence/verdict；11 月 14 日讲了评测轨迹覆盖；9 月 19 日讲过 durable replay。今天不再列一般日志字段或恢复定时器。重点是把昨天的 volatile manifest 变成<strong>审计时可交付、可质询、不会泄露原始秘密的证据包</strong>，并用它决定新版 runtime/model 能否发布。</p>\n      <div class='callout'><strong>核心界限：</strong>完整性、完整度、来源真实性与业务正确性是四种不同保证；任何一个 hash 都不能一次解决。</div>",
+        "en": "<p>Yesterday distinguished inspection, stub replay, isolated re-execution, and a new task in the current world. Now an incident trace has a complete hash chain, and stub replay reaches the same terminal state, yet a customer says the email never arrived. Perhaps the resource-side delivery receipt was never saved, or the audit package omitted a human edit. A hash can show that recorded bytes were not substituted; it cannot show that every necessary event was recorded, and a model cannot prove delivery on behalf of the mail service.</p>\n      <p><strong>Today's proposition:</strong> an auditable agent run bundle answers at least four questions separately. Are recorded items complete and unmodified? Can an authorized reviewer retrieve restricted originals? At which comparable boundary do a rerun and history first diverge? Does the terminal outcome have independent authoritative evidence? Each has a different failure mode. If an exact model or tool version is unavailable, state “behavior matched under these pinned conditions,” not “byte-identical reproduction” or “yesterday's real effect is proved.”</p>\n      <p>October 2 already covered traces, claims, evidence, and verdicts; November 14 covered evaluation-trajectory support; September 19 covered durable replay. We do not repeat generic log fields or recovery timers. The focus is turning yesterday's volatile manifest into <strong>a deliverable, challengeable audit bundle that protects raw secrets</strong>, then using it to decide whether new runtime or model code may be released.</p>\n      <div class='callout'><strong>Boundary:</strong> integrity, coverage, provenance authenticity, and business correctness are four distinct assurances. No single hash provides all four.</div>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "把 Manifest 变成可质询的证据",
+        "en": "Turn a manifest into challengeable evidence"
+      },
+      "html": {
+        "zh": "<p>run manifest 记录目标、prompt/context、模型、工具、环境、政策、数据版本与事件顺序；但有些外部边界只能标 volatile。下一步不是把所有原文打包成 zip 交给每个 reviewer。审计包应该分层：可共享的索引和限制声明、受 ACL 保护的原始证据引用、资源侧效果读回，以及 signer/时间/内容 digest。审核者按任务授权读取所需原文；没有权限的人只看到有限事实与“证据不可访问”，不能据此把未知判为成功。</p>\n      <p>SLSA provenance 与 in-toto attestation 规范面向软件供应链，强调材料、产物、执行者与签名声明的结构。本文借这种“谁对哪些 bytes 和过程负责”的思想组织 Agent 审计包，不把软件构建规范说成 Agent 正确性证明。W3C PROV-DM 提供派生关系，Trace Context 帮助跨组件关联。签名声明能证明签署者作过某项声明及内容未被调包，签署者是否观察到真实投递仍需审查其 observer contract。</p>\n      <p>当 reviewer 只看到已脱敏索引时，可以验证事件计数、哈希根和缺口清单；要判断“发错人”则须有权读回规范化收件人、实际资源回执与当时批准。最小披露不是省略关键证据，而是把读取权分层，并在结论中说清哪些证据因权限不可见。</p>",
+        "en": "<p>The run manifest records goal, prompt and context, model, tools, environment, policy, data versions, and event order, with some external boundaries labeled volatile. The next step is not a zip of every raw input given to every reviewer. The bundle should have layers: a shareable index and limitations, ACL-protected references to originals, resource-side effect readbacks, and signer, time, and content digests. Reviewers retrieve only the originals their task permits. A reviewer without access sees limited facts and “evidence unavailable,” not a basis for a success claim.</p>\n      <p>SLSA provenance and in-toto attestations are software-supply-chain specifications that structure materials, artifacts, actors, and signed statements. We borrow their “who asserts what about which bytes and process?” idea for an agent bundle, without presenting build provenance as proof of agent correctness. W3C PROV-DM represents derivation; Trace Context correlates components. A signature can establish that a signer made a statement over particular bytes. Whether that signer actually observed delivery depends on its observer contract.</p>\n      <p>With only a redacted index, a reviewer may check event counts, a hash root, and declared gaps. To decide “sent to the wrong person,” they need authorized readback of normalized recipients, actual resource receipts, and contemporaneous approval. Minimal disclosure does not mean omitting decisive evidence; it means layered access and an explicit limit on what a restricted reviewer can conclude.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "构造审计包并定位第一分歧",
+        "en": "Build the bundle and locate first divergence"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 310' role='img' aria-labelledby='audit-zh-title audit-zh-desc'><title id='audit-zh-title'>可审计运行包的三层证据</title><desc id='audit-zh-desc'>运行包包含公开但受控的 manifest 与版本/缺口声明、受权限保护的原始 prompt 和工具结果引用、以及资源侧 operation ID 与效果读回。完整性检查确认记录未改，边界覆盖检查确认关键事件未缺，独立 verifier 判断目标结果。三层责任不可互相替代。</desc><rect x='14' y='16' width='173' height='75' rx='8' fill='#20312a'/><rect x='14' y='117' width='173' height='75' rx='8' fill='#20312a'/><rect x='14' y='218' width='173' height='75' rx='8' fill='#20312a'/><rect x='238' y='102' width='186' height='105' rx='8' fill='#8e6935'/><rect x='475' y='102' width='271' height='105' rx='8' fill='#9f4939'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='47'>Manifest</text><text x='27' y='73'>versions · gaps</text><text x='27' y='148'>受控原文</text><text x='27' y='174'>refs · ACL</text><text x='27' y='249'>资源读回</text><text x='27' y='275'>operation ID</text><text x='251' y='135'>完整性 + 覆盖</text><text x='251' y='166'>hash · expected events</text><text x='488' y='135'>独立裁决 / 第一分歧</text><text x='488' y='166'>goal · provenance · limits</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M187 53H215V132H238'/><path d='M187 154H238'/><path d='M187 255H215V179H238'/><path d='M424 155H475'/></g></svg><figcaption>原创示意：签名或 hash 证明记录未被调包，不证明事件真实；受限原文按权限读回，终态由独立 verifier 裁决。手机可横向滑动。</figcaption></figure>\n      <h3>1. 给包一个明确 claim 与版本边界</h3><p>先声明本次要审计的是“2026-11-22 任务 T 的邮件是否送达给批准收件人”，还是“新 runtime 对同一输入是否走相同控制流”。包头固定 taskId、goalVersion、验收口径、replay mode、runtime/model/tool/policy 版本、数据 snapshot/watermark、时区及 volatile 源。不同 claim 对证据要求不同：送达需要资源侧回执，控制流比较需要记录边界响应与消费顺序。不能先组完日志再按结果挑一个容易证明的 claim。</p>\n      <h3>2. 分层保存索引、受限原文与效果</h3><p>索引列事件 ID、类型、因果 parent、时间、输入/输出 digest、来源和缺口；原始 prompt、工单、secret 邻近资料进入受控证据库，包只保存可授权引用与保留期。资源效果层保存 operation ID、规范化动作、批准、API ack、权威读回和未知状态 owner。摘要可帮助阅读，不能覆盖原文。包的受众标签沿来源传播；跨租户资料不能因为加入审计包就自动对任意开发者可见。</p>\n      <h3>3. 先验完整度，再验 hash</h3><p>事件链/签名校验检测已有内容被修改，但若采集器从未记录一次审批或回调，链仍可完好。根据 runtime 状态机设 boundary obligations：每个 dispatch 有对应授权决策、动作指纹、result 或明确 outcome_unknown；每个宣称 succeeded_verified 的效果有权威读回；每次人改附件有身份与版本事件。缺项就标 incomplete，不能拿一致的 hash 把“未见到”变成“没发生”。采集服务自身的故障、采样策略和时钟偏差也进缺口表。</p>\n      <h3>4. 按因果对应找 first divergence</h3><p>比较旧版与新版时，不用数组第 17 行对第 17 行：并行工具的完成顺序不同会整体错位。先按 task/operation ID、目标节点和 causal parent 对齐，再找第一处共同前提下不同的输入、模型输出、工具观察或 reducer 决策。若旧策略调用 A、新策略调用 B，这里是 action divergence；B 后面的旧 observation 没有可比较对象，标 unsupported，而不是强行逐字 diff。若输入已经不同，后续输出差异不能归咎于模型本身。</p>\n      <h3>5. 处理 volatile 与跨版本条件主张</h3><p>模型 endpoint 别名、外部数据库、权限服务和时钟若无法固定，包声明 observed value、时间窗、读取主体和后续不可重现的原因。桩重放能证明新 reducer 在历史响应下如何转移；隔离重执行能在固定的替代环境下给行为分布；当前世界再跑只能证明今天的新任务表现。报告必须列出哪一层证据支持哪句话。对于随机模型，可用多次隔离运行的目标接受率和失败类型，而非要求每字相同；仍不能把统计结果当昨天的投递凭证。</p>\n      <h3>6. 把审计包用于发布门</h3><p>runtime/model 升级前，针对受影响 task class 生成旧新配对包：固定可固定输入，标注 volatile 边界，比较可比前缀和独立 goal verdict。硬门包括无未经授权真实效果、未知发送不伪报成功、受限原文不出审计域、first divergence 有归因、回退路径可用。部分轨迹因缺少外部证据无法判定，就保持 unknown 并补观测；不为达到通过率而丢弃。发布决策保存具体版本和 reviewer，后续工具/政策变化重开相关证据门。</p>\n      <pre><code>bundle = index(manifest, events, effect_receipts, declared_gaps)\nverify_integrity(bundle.hashes, bundle.signatures)\nverify_boundary_obligations(bundle.events, expected_state_machine)\nif bundle.missing_required_event: return INCOMPLETE_EVIDENCE\nold, new = align_by_causal_ids(bundle, candidate_run)\ndivergence = first_comparable_difference(old, new)\nreturn independent_goal_verdict(bundle, divergence, authorized_readbacks)\n</code></pre>\n      <p>这是编辑性审计流程。签名、来源与追踪规范提供可借鉴结构，但没有替业务 verifier 定义“正确完成”。</p>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 310' role='img' aria-labelledby='audit-en-title audit-en-desc'><title id='audit-en-title'>Three evidence layers in an auditable run bundle</title><desc id='audit-en-desc'>A run bundle contains a controlled manifest with versions and declared gaps, access-protected references to original prompts and tool results, and resource-side operation IDs plus effect readbacks. Integrity checks detect modification, boundary coverage checks find missing events, and an independent verifier judges the goal outcome. These responsibilities do not substitute for each other.</desc><rect x='14' y='16' width='173' height='75' rx='8' fill='#20312a'/><rect x='14' y='117' width='173' height='75' rx='8' fill='#20312a'/><rect x='14' y='218' width='173' height='75' rx='8' fill='#20312a'/><rect x='238' y='102' width='186' height='105' rx='8' fill='#8e6935'/><rect x='475' y='102' width='271' height='105' rx='8' fill='#9f4939'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='47'>Manifest</text><text x='27' y='73'>versions · gaps</text><text x='27' y='148'>Restricted source</text><text x='27' y='174'>refs · ACL</text><text x='27' y='249'>Effect readback</text><text x='27' y='275'>operation ID</text><text x='251' y='135'>Integrity + coverage</text><text x='251' y='166'>hash · expected events</text><text x='488' y='135'>Verdict / first divergence</text><text x='488' y='166'>goal · provenance · limits</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M187 53H215V132H238'/><path d='M187 154H238'/><path d='M187 255H215V179H238'/><path d='M424 155H475'/></g></svg><figcaption>Original explanatory illustration: a signature or hash detects substitution, not truth. Restricted originals require authorized readback, and an independent verifier judges the terminal outcome. Scroll horizontally on mobile.</figcaption></figure>\n      <h3>1. Name the claim and version boundary</h3><p>First state whether the audit asks “was task T's 2026-11-22 email delivered to approved recipients?” or “does the new runtime follow the same control flow under the same inputs?” Pin taskId, goalVersion, acceptance definition, replay mode, runtime/model/tool/policy versions, data snapshot or watermark, time zone, and volatile sources in the header. Different claims require different evidence. Delivery needs resource receipts; control-flow comparison needs recorded boundary responses and consumption order. Do not assemble logs and then choose whichever claim the evidence happens to support.</p>\n      <h3>2. Layer index, restricted originals, and effects</h3><p>The index lists event ID, type, causal parent, time, input and output digests, provenance, and gaps. Raw prompts, tickets, and secret-adjacent material remain in a controlled evidence store; the bundle carries authorized references and retention periods. An effect layer records operation ID, normalized action, approval, API acknowledgement, authoritative readback, and an owner for unknown status. Summaries aid reading but do not replace originals. Bundle audience labels follow source restrictions; cross-tenant data does not become visible to every developer by being included in an audit package.</p>\n      <h3>3. Check coverage before trusting hashes</h3><p>A chain or signature can detect modification of captured content, but a collector that never recorded an approval or callback can still produce a perfectly intact chain. Derive boundary obligations from the runtime state machine: every dispatch has an authorization decision, action fingerprint, and result or explicit outcome_unknown. Every succeeded_verified effect has authoritative readback. Every human attachment edit has identity and version events. A missing obligation marks the bundle incomplete; an intact hash must not turn “not observed” into “did not occur.” Collector outages, sampling rules, and clock uncertainty belong in the gap list too.</p>\n      <h3>4. Align by causality to find first divergence</h3><p>Do not compare old line 17 with new line 17; concurrent tool completions can shift every later position. Align first by task and operation IDs, goal node, and causal parent, then locate the earliest differing input, model output, tool observation, or reducer decision under comparable premises. If the old policy chose A and the new one chooses B, that is an action divergence. Old observations after A do not describe B's path and become unsupported rather than being diffed word by word. If inputs differed first, later output changes cannot simply be blamed on the model.</p>\n      <h3>5. Make conditional claims at volatile boundaries</h3><p>If a model alias, external database, authority service, or clock cannot be pinned, record the observed value, time window, read principal, and reason it cannot later be reconstructed. Stub replay establishes new reducer behavior under historical responses. Isolated re-execution estimates behavior under a pinned replacement environment. A current-world rerun tests a new task today. State which evidence level supports each sentence. For a stochastic model, repeated isolated runs can measure goal acceptance and failure types rather than demanding identical words. Those statistics still do not prove yesterday's delivery.</p>\n      <h3>6. Use the bundle as a release gate</h3><p>Before a runtime or model upgrade, create old/new paired bundles for affected task classes. Pin what can be pinned, label volatile boundaries, and compare common prefixes and independent goal verdicts. Hard gates include no unauthorized real effect, no false success on an unknown send, no restricted original escaping the audit domain, an attributable first divergence, and a usable rollback path. A trajectory missing external evidence remains unknown and needs further observation rather than disappearing from the denominator. The release decision names versions and reviewer; later tool or policy change reopens dependent evidence gates.</p>\n      <pre><code>bundle = index(manifest, events, effect_receipts, declared_gaps)\nverify_integrity(bundle.hashes, bundle.signatures)\nverify_boundary_obligations(bundle.events, expected_state_machine)\nif bundle.missing_required_event: return INCOMPLETE_EVIDENCE\nold, new = align_by_causal_ids(bundle, candidate_run)\ndivergence = first_comparable_difference(old, new)\nreturn independent_goal_verdict(bundle, divergence, authorized_readbacks)\n</code></pre>\n      <p>This audit flow is editorial engineering design. Attestation, provenance, and tracing specifications offer useful structure but do not define the business verifier's meaning of “done correctly.”</p>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "完整性之外还需事件覆盖",
+        "en": "Integrity is not event coverage"
+      },
+      "html": {
+        "zh": "<p>把某个高影响 dispatch d 的证据义务写成谓词：</p><div class='equation'>Covered(d) = AuthDecision(d) ∧ ActionFingerprint(d) ∧ [Result(d) ∨ UnknownOwned(d)]</div><p>AuthDecision 是当时的权限判断，ActionFingerprint 是规范化参数与目标版本的摘要，Result 是工具/资源返回的可核对结果，UnknownOwned 是明确记录结果未知及追查 owner。对每个宣称成功的效果还要有 AuthoritativeReadback。Covered 只说明边界事件没有明显缺项，不保证其中内容真实；事件捕获失败的任务必须记为 coverage gap。工程上先问“哪些事件应出现”，再验其 hash。</p>\n      <p>若 bundle 的规范化索引与事件根摘要为 b，签署者公钥为 k，签名为 σ，可验证：</p><div class='equation'>Verify(k, σ, H(b)) = true</div><p>H 是加密哈希，Verify 检查签名是否覆盖这份 bundle 的摘要。true 说明该身份签过这些 bytes，不能证明工具真的执行过、原始来源未造假，也不能授权当前 reviewer 读取秘密。签名、覆盖、来源真实性与独立 goal verdict 需要分别判断，不能压成“已认证”一个状态。</p>\n      <p>跨版本对照也不应把所有差异平均成一个分数。先定位第一处可比较的因果分歧，随后判断它是否改变验收或安全 invariant；未走过的新分支标 unsupported，需隔离环境产生反馈。数学与签名只给可核查边界，实际结论仍来自资源读回与 verifier。</p>",
+        "en": "<p>Express the evidence obligation for consequential dispatch d as a predicate:</p><div class='equation'>Covered(d) = AuthDecision(d) ∧ ActionFingerprint(d) ∧ [Result(d) ∨ UnknownOwned(d)]</div><p>AuthDecision is the contemporaneous authorization decision. ActionFingerprint is a digest of normalized arguments and goal version. Result is a checkable tool or resource response. UnknownOwned explicitly records an unknown outcome and its investigation owner. A claimed successful effect additionally needs AuthoritativeReadback. Covered says expected boundary events are not visibly missing; it does not make their content true. A collector failure creates a coverage gap. Ask which events must exist before checking their hashes.</p>\n      <p>Let b be a canonical bundle index and event-root digest, k a signer's public key, and σ its signature. An integrity check is:</p><div class='equation'>Verify(k, σ, H(b)) = true</div><p>H is a cryptographic hash, and Verify checks whether the signature covers this bundle digest. True means an identity signed these bytes. It does not prove a tool actually ran, that a source did not fabricate data, or that today's reviewer may read restricted originals. Signature, coverage, provenance authenticity, and independent goal verdict must be judged separately rather than compressed into one “certified” state.</p>\n      <p>A cross-version comparison should not average every difference into one score either. Locate the first comparable causal divergence, then ask whether it changes acceptance or a safety invariant. An untraversed new branch remains unsupported and needs feedback from an isolated environment. Mathematics and signatures set checkable boundaries; resource readback and a verifier establish the actual conclusion.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统的影响",
+        "en": "Implications for agent systems"
+      },
+      "html": {
+        "zh": "<h3>可靠性与交付</h3><p>分层审计包让团队既能回答“昨天发生什么”，又不把跨租户原文发给所有排障者。缺失事件明确为 incomplete，不为补全报表而从模型生成。对新版 runtime，桩重放可快速发现 reducer 变更；隔离重执行再评估模型/工具组合，避免每次都冒险在生产复现。</p>\n      <h3>成本与隐私</h3><p>保留 digest、受控原文引用和关键 effect receipt，比无限保存所有明文 prompt 更可治理；但只存摘要可能失去必要证据。按风险与保留期选择字段，定期验证引用可读回且权限正确。审计本身是一种数据使用，需要受众、目的和访问记录。</p>",
+        "en": "<h3>Reliability and delivery</h3><p>A layered bundle lets a team answer “what happened yesterday?” without giving every investigator cross-tenant raw text. Missing events become incomplete rather than model-generated filler. Stub replay can quickly expose reducer changes in a new runtime; isolated re-execution then assesses the model-tool combination without trying to recreate every failure in production.</p>\n      <h3>Cost and privacy</h3><p>Digests, controlled original references, and decisive effect receipts are easier to govern than indefinitely retaining every plaintext prompt. But keeping only summaries can destroy evidence. Choose fields and retention by risk, and periodically check that authorized readback still works. Audit is itself a data use with audience, purpose, and access records.</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<p><strong>完整性幻觉：</strong>hash chain 可在少录一次工具调用后仍自洽。必须用状态机义务与外部系统对账检查缺口；采集器、日志队列和采样策略也需版本化。缺少原始回执时不能因模型摘要说“已发送”就补成功状态。</p>\n      <p><strong>可重放与隐私：</strong>保存所有原文提高调试便利，也扩大敏感数据持久化。受控证据库与权限化 readback 可以兼顾；但引用过期、密钥撤销或数据删除会降低未来审计能力。报告应写明这种证据损失，而不是静默退回模型解释。</p>\n      <p><strong>精确性与非确定性：</strong>对不可固定的模型和并行工具，强求字节相同会误报回归；只求最终成功又可能漏掉越权步骤。分层比较输入、动作、工具观察、资源效果与 goal verdict；明确哪些是精确匹配，哪些只作语义或统计比较。</p>\n      <p><strong>因果匹配错误：</strong>用第 N 个事件对第 N 个事件，在重排或重试时会制造假“第一分歧”。按 operation/node ID、父子依赖与事件类型匹配；若对应关系不清，标 unalignable 而非强行归因。新分支需要真实隔离反馈，不能移植旧 observation。</p>\n      <p><strong>发布评测：</strong>注入缺少审批事件、被调包的工具结果、签名有效但源数据虚假、迟到回调、模型别名漂移、权限化原文不可读和桩重放误连生产工具。成功门要求缺口被明确发现、测试不产生外部写入、敏感证据不过度暴露，并能指出第一分歧与结果证据等级。若审核包完整性或覆盖不明，不能发布“已复现并验证”。</p>",
+        "en": "<p><strong>Integrity illusion:</strong> a hash chain can be internally consistent after a tool call was never logged. State-machine obligations and reconciliation with external systems expose gaps. Collector, queue, and sampling-policy versions matter too. A model summary saying “sent” cannot fill a missing original receipt.</p>\n      <p><strong>Replay versus privacy:</strong> retaining every raw input eases debugging but increases durable sensitive-data exposure. A controlled evidence store with authorized readback can balance them. Expired references, revoked keys, or deleted data may reduce future auditability. Reports should name that evidence loss instead of silently falling back to model explanation.</p>\n      <p><strong>Exactness versus nondeterminism:</strong> demanding identical bytes from an unpinnable model or concurrent tools can falsely label regression. Checking only terminal success can miss an unauthorized step. Compare input, actions, tool observations, resource effects, and goal verdict in layers; label which comparisons are exact and which are semantic or statistical.</p>\n      <p><strong>Bad causal alignment:</strong> comparing event N to event N creates a false “first difference” after reordering or retry. Match operation and node IDs, parent relationships, and event type. If correspondence remains unclear, mark unalignable rather than force attribution. A new branch needs real isolated feedback; an old observation cannot be transplanted.</p>\n      <p><strong>Release evaluation:</strong> inject a missing approval event, substituted tool result, valid signature over a false source claim, late callback, drifting model alias, inaccessible restricted original, and a stub replay accidentally connected to production tools. The gate requires explicit gap detection, no external writes from tests, no overexposure of evidence, and a first divergence with an honest evidence level. Unknown integrity or coverage cannot support “reproduced and verified.”</p>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可以带走的判断",
+        "en": "Reusable judgments"
+      },
+      "html": {
+        "zh": "<ol><li>审计包分 manifest、受控原文和资源效果；签名完整不等于事件无缺或结果正确。</li><li>先检查每个派发应有的授权、指纹与结果/unknown，再验证 hash。</li><li>跨版本比较按因果 ID 找第一可比分歧；新分支无历史观察就标 unsupported。</li><li>审计结论须标明重放模式、volatile 边界和独立终态证据，测试永不重发真实副作用。</li></ol>",
+        "en": "<ol><li>Layer manifest, restricted originals, and resource effects. A valid signature neither proves complete capture nor correct outcome.</li><li>Check expected authorization, fingerprint, and result or owned-unknown event for each dispatch before checking hashes.</li><li>Align cross-version runs by causal IDs to find the first comparable divergence; mark new branches unsupported by old observations.</li><li>State replay mode, volatile boundaries, and independent terminal evidence in the audit conclusion. Tests never resend real effects.</li></ol>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "来源与证据边界",
+        "en": "Sources and evidence boundaries"
+      },
+      "html": {
+        "zh": "<ul class='source-list'><li><a href='https://slsa.dev/spec/v1.1/provenance'>SLSA Provenance Specification</a> — 官方软件供应链来源结构；本文借材料/产物/执行者思想，不把构建证明当 Agent 正确性。</li><li><a href='https://github.com/in-toto/attestation/blob/main/spec/v1/README.md'>in-toto Attestation Framework</a> — 官方签名声明结构；签名不替代业务 observer。</li><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> 与 <a href='https://www.w3.org/TR/trace-context/'>Trace Context</a> — 官方派生/跨组件关联规范；需要业务补充完整度与终态门。</li><li><a href='https://docs.pytorch.org/docs/stable/notes/randomness.html'>PyTorch Reproducibility Notes</a> — 官方随机性限制说明；不代表任意托管模型。</li><li><a href='https://reproducible-builds.org/docs/'>Reproducible Builds Documentation</a> — 一手社区实践，说明固定材料和构建环境的价值。</li></ul><p>链接和标题已于 2026-11-23 核验。Agent audit bundle、boundary obligation、first-divergence 对齐及发布门均为编辑性工程综合。</p>",
+        "en": "<ul class='source-list'><li><a href='https://slsa.dev/spec/v1.1/provenance'>SLSA Provenance Specification</a> — official software-supply-chain provenance structure; materials, artifacts, and actors inspire this design but do not prove agent correctness.</li><li><a href='https://github.com/in-toto/attestation/blob/main/spec/v1/README.md'>in-toto Attestation Framework</a> — official signed-statement structure; a signature does not replace a business observer.</li><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> and <a href='https://www.w3.org/TR/trace-context/'>Trace Context</a> — official derivation and correlation specifications; business completeness and terminal gates remain necessary.</li><li><a href='https://docs.pytorch.org/docs/stable/notes/randomness.html'>PyTorch Reproducibility Notes</a> — official limits of deterministic behavior, not a claim about every hosted model.</li><li><a href='https://reproducible-builds.org/docs/'>Reproducible Builds Documentation</a> — first-party community practice on fixed materials and build environments.</li></ul><p>Links and titles were checked on 2026-11-23. The agent audit bundle, boundary obligations, causal first-divergence alignment, and release gate are editorial engineering synthesis.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "专题收束与下一站",
+        "en": "Series close and next stop"
+      },
+      "html": {
+        "zh": "<p><strong>本专题已讲完：</strong>1/2 区分历史查看、桩重放、隔离重执行和当前新任务，说明 seed 只固定模型输入的一角，manifest 与边界输出才能定位轨迹差异，测试不能重发副作用。2/2 把 volatile manifest、受控原文与权威效果读回编成 audit bundle，先验事件覆盖再验签名，按因果 ID 找第一可比分歧；跨版本结论必须标明证据等级与不可固定条件。两篇共同回答：可复现主张要精确定义，审计证据不能由完整 hash 或流畅摘要替代。</p><p><strong>尚未讲完：</strong>本专题的捕获、重放、审计与发布链已闭合。具体保留期限、签名主体与隐私策略取决于组织要求，不在此虚构。</p><p><strong>下一篇起点：</strong>回到系统路线，选择独立问题：当一个 Agent 任务在多个模型、工具和人之间失败，如何做因果归因而不把同一错误重复算到每个组件？明天不续讲本专题。</p>",
+        "en": "<p><strong>Completed in this series:</strong> Part 1 separated history inspection, stub replay, isolated re-execution, and a new current-world task. A seed fixes only one part of model input; manifests and boundary outputs locate trajectory differences, and tests must not resend side effects. Part 2 assembled a volatile manifest, restricted originals, and authoritative effect readback into an audit bundle. It checked event coverage before signatures and aligned comparable causal events to find first divergence. Cross-version claims name evidence level and unpinnable conditions. Together, the two parts define reproducibility precisely; an intact hash or fluent summary cannot substitute for audit evidence.</p><p><strong>Still open:</strong> capture, replay, audit, and release form a complete chain for this series. Retention period, signing actors, and privacy policy depend on the organization and are not invented here.</p><p><strong>Next starting point:</strong> return to the systematic path with a separate question: when an agent task involving models, tools, and humans fails, how can the system attribute cause without charging one error to every component? This series does not continue tomorrow.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "complete",
+    "established": {
+      "zh": [
+        "Agent 运行依赖目标、上下文、模型/采样、工具、环境/政策、外部观察及事件顺序，seed 只固定一项",
+        "历史查看、桩重放、隔离重执行与当前世界新任务证明不同主张，测试重放不得重复真实副作用",
+        "audit bundle 分层保存 manifest、受控原文和权威 effect readback；事件覆盖与签名完整性需分别验证",
+        "跨版本按因果 ID 找第一可比分歧，volatile 边界与不支持的新分支须明确标注，终态靠独立 verifier"
+      ],
+      "en": [
+        "An agent run depends on goal, context, model and sampling, tools, environment and policy, external observations, and event order; a seed fixes only one part",
+        "Inspection, stub replay, isolated re-execution, and a new current-world task support distinct claims; test replay must not repeat real effects",
+        "An audit bundle layers manifest, restricted originals, and authoritative effect readback; event coverage and signature integrity need separate checks",
+        "Cross-version comparison uses causal IDs for first comparable divergence, labels volatile boundaries and unsupported branches, and relies on independent goal verification"
+      ]
+    },
+    "next": {
+      "zh": "本专题已完成；下一篇从多模型、工具与人工参与的 Agent 失败轨迹出发，讨论不重复归罪的因果故障归因。",
+      "en": "This series is complete; the next topic begins with failure trajectories across models, tools, and humans and causal attribution that does not count one error against every component."
+    }
+  }
+}

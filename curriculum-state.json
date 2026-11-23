@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-11-22",
-  "latestIssueDate": "2026-11-22",
+  "generatedAt": "2026-11-23",
+  "latestIssueDate": "2026-11-23",
   "completedTopics": [
+    "agent-audit-bundle-integrity-first-divergence-versioning",
     "cross-domain-declassification-minimization-inference-evaluation",
     "multi-tool-context-dependency-closure-taint-evaluation",
     "agent-whole-task-policy-selection-budget-tail-risk",
@@ -29,6 +30,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "agent-reproducible-execution-internals",
     "cross-domain-agent-data-flow-internals",
     "multi-tool-working-context-internals",
     "agent-whole-task-economics-internals",
@@ -56,6 +58,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-23",
+      "topicId": "agent-audit-bundle-integrity-first-divergence-versioning",
+      "seriesId": "agent-reproducible-execution-internals",
+      "part": 2,
+      "complete": true
+    },
     {
       "date": "2026-11-22",
       "topicId": "agent-execution-reproducibility-replay-boundaries",
@@ -540,26 +549,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "agent-reproducible-execution-internals",
-    "nextPart": 2,
-    "established": {
-      "zh": [
-        "Agent 轨迹依赖目标、上下文、模型/采样、工具、环境/政策、外部观察和调度顺序，seed 仅固定其中一项",
-        "历史查看、固定边界输出的桩重放、隔离重执行和当前世界新任务是不同证据模式，不能混称",
-        "run manifest 与模型/工具/审批/回调等边界事件记录用于定位分歧，测试重放不得重复真实副作用",
-        "字节、控制流和目标验收等价不同；哈希链检测篡改不证明事件真实或授权访问"
-      ],
-      "en": [
-        "An agent trajectory depends on goal, context, model and sampling, tools, environment and policy, external observations, and event order; a seed fixes only one component",
-        "Inspection, stub replay with recorded boundary outputs, isolated re-execution, and a new current-world task are distinct evidence modes",
-        "The run manifest and boundary events for models, tools, approvals, and callbacks locate divergence; test replay must not duplicate real effects",
-        "Byte, control-flow, and goal-acceptance equivalence differ; a hash chain detects changes but does not prove truth or authorize broad access"
-      ]
-    },
-    "next": {
-      "zh": "Agent Reproducible Execution Internals 2/2：从含 volatile 边界的 run manifest 出发，构造 audit bundle、完整性校验、first-divergence、跨版本对照和发布门。",
-      "en": "Agent Reproducible Execution Internals 2/2: start from a run manifest with volatile boundaries and build an audit bundle, integrity checks, first-divergence analysis, cross-version comparison, and a release gate."
-    }
-  }
+  "pendingSeries": null
 }
