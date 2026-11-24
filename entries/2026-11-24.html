@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>Agent 失败时，模型、工具和人到底谁造成了结果？ · AI Agent Deep Dive</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body class="issue-page">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><i></i><span>AI Agent<br><b>Deep Dive</b></span></a>
+    <div class="language-switch" role="group" aria-label="Language">
+      <button type="button" data-set-language="zh" aria-pressed="true">中文</button>
+      <button type="button" data-set-language="en" aria-pressed="false">English</button>
+    </div>
+  </header>
+  <main>
+    <article class="lesson" data-language="zh">
+      <p class="kicker">Agent Failure Causality Internals · 第 1/2 篇</p>
+      <h1>Agent 失败时，模型、工具和人到底谁造成了结果？</h1>
+      <p class="dek">把失败轨迹变成有证据等级的因果图：区分触发、传播、拦截缺口与资源效果，避免按时间先后或组件数量重复归罪。</p>
+      <div class="issue-meta"><span>2026-11-24</span><span>约 20 分钟</span><span>Agent failure / Causal attribution / Distributed traces / Counterfactuals / Safety gates</span></div>
+
+      <section class="lesson-section" id="proposition-zh" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>今日命题</h2></header>
+        <div class="section-copy"><p>一个 Agent 把报告发给了错误收件人。检索工具返回过期联系人，模型选了该地址，审批界面只显示姓名，发送工具按结构化参数提交，邮件服务回执显示投递成功。事故复盘若在模型、检索、审批和工具四栏各记一次“造成错误发送”，会把同一个结果重复计为四次；若只找轨迹里最早的异常，又会把过期数据当作唯一原因，忽略本可拦截错误的关口。</p>
+      <p><strong>今日命题：</strong>因果归因不是从 trace 中挑一个最像罪魁的 span。要先固定失败结果与验收口径，把已观察的事实和候选依赖连接成有类型的图，再问哪些改变能在同一任务条件下阻断结果。答案应标注是触发、传播、拦截缺口、效果证据还是未知；同一事故的不同贡献不能被当成独立事故求和。</p>
+      <p>本文讨论工程系统的故障机制，不从日志推断人员责任。人的审批是否构成实质决策，取决于当时实际看到了什么、是否有权拒绝、是否执行了批准动作。模型的流畅事后解释同样不是观察证据。</p></div>
+      </section>
+      <section class="lesson-section" id="connection-zh" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>从审计包走向因果问题</h2></header>
+        <div class="section-copy"><p>昨天的 audit bundle 解决“哪些字节、事件和效果可以被有权者读回”，按因果 ID 找第一可比分歧。它为今天提供原料，但<strong>第一分歧不等于根因</strong>。一次过期检索可能是最早的差异，却未必足以让邮件发错；模型可以识别冲突，审批者可以拒绝，发送工具可以比较收件人 ID。反过来，若没有检索差异，错误也可能由模型解析地址的 bug 触发。需要把可观察顺序、信息依赖和阻断条件分开。</p>
+      <p>分布式 trace 的 parent/child span 和 link 说明一次调用如何被关联；Lamport 的 happened-before 只给出可证明的部分顺序，时间戳靠近、先发生、甚至处在同一 trace 都不自动形成因果边。W3C PROV 的 used/wasGeneratedBy 可描述实体与活动的来源。把这些规范用于 Agent 时，要增加“模型实际消费了哪段证据”“审批显示了哪些字段”“工具实际提交了哪些资源参数”等应用语义；规范本身不会证明错误的必要原因。</p>
+      <p>因此，审计包回答证据能否核实，因果图回答哪些机制可能连接到结果，隔离干预才尝试回答“若改一个条件，结果是否会变”。三者各自有边界：保留了原文仍可能缺少关键变量；画了箭头仍可能只是相关；重放了旧 observation 的分支也不等于真正反事实。</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-zh" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>构造有证据等级的故障图</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 820 280' role='img' aria-labelledby='cause-zh-title cause-zh-desc'><title id='cause-zh-title'>错误收件人的因果路径与拦截点</title><desc id='cause-zh-desc'>过期搜索结果影响模型选择，未充分展示的审批界面和缺少地址校验的发送工具让错误通过，资源侧回执证实错误投递。箭头表示待证实的依赖，不表示节点自动有罪；两个拦截点可分别阻断结果。</desc><rect x='14' y='22' width='170' height='75' rx='8' fill='#20312a'/><rect x='232' y='22' width='170' height='75' rx='8' fill='#20312a'/><rect x='450' y='22' width='170' height='75' rx='8' fill='#8e6935'/><rect x='668' y='22' width='138' height='75' rx='8' fill='#9f4939'/><rect x='232' y='177' width='170' height='78' rx='8' fill='#5c6251'/><rect x='450' y='177' width='170' height='78' rx='8' fill='#5c6251'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='52'>过期检索结果</text><text x='27' y='76'>触发候选</text><text x='245' y='52'>模型选错地址</text><text x='245' y='76'>传播节点</text><text x='463' y='52'>发送工具执行</text><text x='463' y='76'>提交边界</text><text x='681' y='52'>错误投递</text><text x='681' y='76'>receipt</text><text x='245' y='207'>审批显示地址？</text><text x='245' y='231'>拦截点 A</text><text x='463' y='207'>工具校验地址？</text><text x='463' y='231'>拦截点 B</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M184 60H232'/><path d='M402 60H450'/><path d='M620 60H668'/><path d='M317 177V98'/><path d='M535 177V98'/></g></svg><figcaption>原创示意：先分清触发、传播、拦截与资源效果；边的因果性仍须用原始证据和安全干预验证。手机可横向滑动。</figcaption></figure>
+      <h3>1. 固定 outcome 和分析单位</h3><p>先定义任务 T 的失败变量：邮件服务在批准窗口内把报告投递到规范化地址 B，而当时有效批准只允许地址 A。以一个 task/run 与一次资源效果为分析单位，保存 goalVersion、批准版本、收件人规范化规则、时间窗、operation ID 和资源回执。不要把“模型说已发送”当结果，也不要把客户端 timeout 当“未发送”：后者可能是 unknown，必须向资源侧对账。多个 span 指向同一个 operation ID 时，只记一个错误投递。</p>
+      <h3>2. 从证据建节点，给边分级</h3><p>节点分为外部数据、模型输入与决策、授权/人工展示、工具参数与提交、资源观察、验收结果。每个节点保存原始证据引用、版本、观察者、时间和缺口。边至少标 <em>调用依赖</em>、<em>数据消费</em>、<em>授权约束</em>、<em>资源效果</em>之一。模型输入实际包含检索片段，才可把检索到模型画作已观察的数据消费；检索与错误答案同时出现而无输入记录，只能标候选。审批仅显示姓名时，不能从“approve”事件推断审核者见过邮箱地址。</p>
+      <h3>3. 区分四种角色</h3><p>过期联系人是触发候选；模型选择该地址是传播/转换；审批界面省略规范化地址、发送工具缺少地址校验，是拦截缺口；邮件服务回执是效果证据。一个节点可有多种角色，但角色不是“责任份额”。问“哪个单点修复最早可以阻断路径”与问“为什么最初出现错误值”是两个不同问题。报告需要分别回答，不能让一个答案吞掉另一个。</p>
+      <h3>4. 用可执行的隔离对照挑战边</h3><p>在无真实发送能力的隔离环境中固定任务、批准快照、模型/工具版本与记录边界，分别替换过期检索、完整显示审批地址、启用发送前地址校验。每次只改变已声明条件，重新生成其下游输入与观察。若只把旧轨迹中的模型输出粘到新检索之后，得到的是不一致拼接，不是干预。比较节点、动作和结果；新分支无法真实获取的观察标 unsupported。独立 verifier 以规范化地址和资源模拟回执判断，不用模型自评。</p>
+      <h3>5. 形成一个不重复计数的结论</h3><p>输出一条 incidentId 与唯一 outcome，附带多个 contribution 记录：证据等级、候选机制、可阻断的干预、无法观察的条件。组件质量指标可分别记录“过期数据率”“错误地址提出率”“门禁漏检率”，但事故总数仍是一次。若多个错误一起才造成结果，使用组合条件；若证据不足，保留 unknown，不硬分配 25% 给四个组件。</p>
+      <pre><code>outcome = verify(resource_receipt, approved_recipient)
+graph = link(observed_events, consumed_inputs, policy_versions)
+for candidate in graph.paths_to(outcome):
+    label(candidate, evidence_level, role, missing_observations)
+    if safe_isolation_exists(candidate):
+        rerun_downstream_with_one_intervention(candidate)
+report_one_incident(outcome, contributions, unsupported_branches)</code></pre></div>
+      </section>
+      <section class="lesson-section" id="mathematics-zh" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>必要数学：必要条件不是唯一原因</h2></header>
+        <div class="section-copy"><p>用小模型说明而非代替真实系统。令 X=1 表示检索给出过期地址，M=1 表示模型提交错误地址，G=1 表示发送前门禁未拦截，S=1 表示资源实际执行发送，Y=1 表示错误投递。一个候选结构是 <code>M=f(X,P,U)</code>，<code>Y=M ∧ G ∧ S</code>。P 是当时 prompt/批准上下文，U 是未记录的模型与环境扰动；f 是待检验的转换机制，不是“有 X 就必有 M”的断言。后一式只说在这个简化路径上，错误选择、门禁漏检、真实发送同时成立才出现 Y。真实系统还可能有独立路径，例如工具自己改写地址，必须加入图而不能硬套此式。</p>
+      <p>对已观察的一次执行，若隔离地把 G 设为 0 并重新执行下游，得到 <code>Y(do(G=0))=0</code>，则门禁对<strong>这条路径</strong>有阻断作用。<code>do</code> 表示主动设置变量，区别于在历史日志里筛出 G=0 的其他任务；后者可能任务风险和收件人类型都不同。若同时把 X 修好也得到 Y=0，X 与 G 都可成为有效干预点，并不矛盾，更不能把同一个 Y 算两次。对未观测 U、无法固定的外部状态或不可安全重放的发送，只能给出条件性证据，不宣称完整反事实已证实。</p>
+      <p>工程上尤其要防“可观察性偏差”：日志里有模型输出、没有审批屏幕快照，不能据此把模型贡献标成已证实、审批标成无贡献。缺证本身需要作为图上的未观测变量与调查请求。百分比责任分摊需要另一个明确的目标函数和规范依据；这里的二值结构方程不产生它。</p></div>
+      </section>
+      <section class="lesson-section" id="implications-zh" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>对 Agent 系统的影响</h2></header>
+        <div class="section-copy"><p><strong>运行时采集：</strong>traceId 不够；保存 taskId、operation ID、模型输入引用、被消费的检索版本、审批展示字段、授权版本、规范化工具参数、资源回执与 verifier 结果。敏感内容采用受控引用与权限读回，不能为归因把完整客户数据塞进普通日志。跨异步回调要用 span link 和业务 ID 对齐，不能用时钟排序替代依赖。</p>
+      <p><strong>安全设计：</strong>将“建议值生成”与“不可逆提交”分开。模型和检索可提供候选地址；提交边界用规范化身份、当时批准范围与资源侧状态执行确定性校验。审批 UI 必须展示足以判断的身份字段，否则人的点击不能充当对隐藏参数的有效复核。把阻断责任前移到可验证边界，比在事故后追问模型为什么没想起来更可靠。</p>
+      <p><strong>评测与修复：</strong>把一次事故转成同一因果链的多层回归：输入数据过期测试、模型冲突识别测试、审批信息呈现测试、发送门禁测试、资源效果对账测试。每层有自己的分母；整体任务成功与事故数另算。修复某一层后仍需端到端验收，因为另一条路径可能绕过它。</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-zh" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>取舍与失败模式</h2></header>
+        <div class="section-copy"><p><strong>时序误判：</strong>span 先发生只说明候选顺序，不说明它的值被后续步骤消费。并行检索、缓存、重试和迟到回调尤其容易制造错误箭头。没有消费证据就把边降级为假设；无法对齐的分支标 unalignable。</p>
+      <p><strong>反事实拼接：</strong>把新检索结果和旧模型选择放到一起，再说“修数据也没用”，违反下游重算。隔离重执行成本高、模型非确定性强；可先做确定性门禁单元对照，再以多次全链实验估计范围，并标明环境限制。</p>
+      <p><strong>多重充分路径：</strong>修一个 guard 后，另一路工具可能仍可直写。只报告“单点修复令一次重放通过”，会低估其他路径。图中必须保留替代路径，发布门用端到端负例与权限边界检验。</p>
+      <p><strong>人和模型的证据不对称：</strong>模型输出常被完整保存，人的所见却未记录。按日志量分配责任会系统性偏向指责可见组件。按权限保存审批屏幕字段、动作与版本，但避免记录不必要的个人信息；缺失就明确 unknown。</p>
+      <p><strong>组织归因：</strong>本文的 causal contribution 不等于个人过错、法律责任或团队绩效。Google SRE 的 blameless postmortem 强调理解系统条件与改进控制。事故复盘应输出可验证的修复点、残余风险和证据缺口；不要把“模型”“工具”“人”拟人化为单一责任桶。</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-zh" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>可以带走的判断</h2></header>
+        <div class="section-copy"><ol><li>先定义一个资源侧可验收的失败结果和 incidentId，再记录多个贡献；不要按 span 或组件重复计数。</li><li>时间顺序、数据消费、授权约束和因果阻断是不同关系；图的边必须附证据等级。</li><li>触发错误值、传播它、未能拦截它、证实效果，是四种不同角色；第一分歧并不自动独占原因。</li><li>反事实要安全地重算下游；无法固定的观察保留 unknown，修复后仍做端到端验收。</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-zh" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>来源与证据边界</h2></header>
+        <div class="section-copy"><ul><li><a href='https://www.microsoft.com/en-us/research/publication/time-clocks-ordering-events-distributed-system/'>Lamport, Time, Clocks, and the Ordering of Events in a Distributed System</a> — 原始论文，支持分布式事件的部分顺序，不把先后关系当因果证明。</li><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> — 规范，支持实体、活动、生成与使用关系的表达。</li><li><a href='https://opentelemetry.io/docs/concepts/signals/traces/'>OpenTelemetry Traces</a> — 官方概念文档，支持 span、父子关系和 link 的观测语义。</li><li><a href='https://arxiv.org/abs/1505.00162'>Halpern, A Modification of the Halpern-Pearl Definition of Causality</a> — 作者论文，说明实际原因的形式化定义需要反事实和条件；本文没有把该定义直接应用成自动责任分配器。</li><li><a href='https://sre.google/sre-book/postmortem-culture/'>Google SRE, Postmortem Culture</a> — 官方工程实践，支持无责复盘与系统性改进。</li></ul><p>以上链接与标题于 2026-11-24 核验。本文的节点类型、证据等级、事故计数与隔离干预流程是编辑性工程综合，不是上述规范对特定 Agent 产品行为的证明。</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-zh" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>已讲完、尚未讲完与下一篇</h2></header>
+        <div class="section-copy"><p><strong>今天已讲完：</strong>以唯一资源效果定义失败；把审计证据组织成有类型、有等级的因果图；区分触发、传播、拦截缺口和效果证据；用安全隔离干预检查阻断可能，而不按组件重复计算事故。今天的公式只建模一条路径，未把候选边当事实。</p><p><strong>尚未讲完：</strong>真实系统中可能有多个足以致害的路径，部分变量不可观察，重放结果也会随模型和环境波动。如何设计可识别的干预矩阵、处理共同原因与交互作用、估计修复的边际收益和残余风险，还需单独讲透。</p><p><strong>下一篇起点：</strong>Agent Failure Causality Internals 2/2 从今天的 typed graph 与唯一 incidentId 出发，讨论最小阻断集、混杂与不可识别、隔离 A/B 干预、重复试验和不重复计数的发布门；不重讲 trace 字段或四种角色。</p></div>
+      </section>
+    </article>
+    <article class="lesson" data-language="en" hidden>
+      <p class="kicker">Agent Failure Causality Internals · Part 1 of 2</p>
+      <h1>When an Agent Fails, What Actually Caused the Outcome?</h1>
+      <p class="dek">Turn a failed trajectory into an evidence-graded causal graph. Separate trigger, propagation, missing interception, and resource effect without assigning cause by timestamp or counting the same failure against every component.</p>
+      <div class="issue-meta"><span>2026-11-24</span><span>20 min read</span><span>Agent failure / Causal attribution / Distributed traces / Counterfactuals / Safety gates</span></div>
+
+      <section class="lesson-section" id="proposition-en" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>Today's proposition</h2></header>
+        <div class="section-copy"><p>An agent sends a report to the wrong recipient. Retrieval returned an outdated contact. The model chose that address. The approval screen displayed only a name. The send tool submitted structured arguments, and the mail service returned a successful delivery receipt. A review that records “caused wrong delivery” once each for model, retrieval, approval, and tool counts one outcome four times. A review that picks only the earliest anomaly treats stale data as the sole cause and overlooks gates that could have stopped the error.</p>
+      <p><strong>Today's proposition:</strong> causal attribution is not selecting the most suspicious span in a trace. Fix the failed outcome and its acceptance rule; connect observed facts and candidate dependencies in a typed graph; then ask which changes, under the same task conditions, would prevent that outcome. Label each finding as trigger, propagation, missing interception, effect evidence, or unknown. Several contributions to one incident are not several incidents to be summed.</p>
+      <p>This is engineering analysis of a failure mechanism, not a personnel judgment. Whether a human approval was a meaningful decision depends on what that person actually saw, whether rejection was possible, and what action they took. A fluent retrospective explanation from the model is not observation evidence either.</p></div>
+      </section>
+      <section class="lesson-section" id="connection-en" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>From audit bundle to causal question</h2></header>
+        <div class="section-copy"><p>Yesterday's audit bundle established which bytes, events, and effects an authorized reviewer can retrieve, and how to find a first comparable divergence by causal ID. That gives today's investigation its material. Yet <strong>the first divergence is not automatically the root cause</strong>. A stale retrieval may be the earliest difference without being sufficient for wrong delivery: the model might detect a conflict, an approver might reject, or the send tool might compare canonical recipient IDs. Conversely, an address-parsing model bug could cause wrong delivery even when retrieval is current. Observable order, information dependency, and interception conditions must be separate.</p>
+      <p>A distributed trace's parent-child spans and links correlate calls. Lamport's happened-before relation establishes a partial order; nearby timestamps, earlier occurrence, or presence in one trace do not themselves create a causal edge. W3C PROV's used and wasGeneratedBy relations describe provenance of entities and activities. An agent investigation adds application semantics: which evidence span the model consumed, which fields the approval screen showed, and which resource arguments the tool actually submitted. The standards structure evidence; they do not prove a necessary cause of the error.</p>
+      <p>Thus the audit bundle asks whether evidence can be checked, the causal graph asks which mechanisms may connect to the outcome, and an isolated intervention tests what changes if a condition is altered. Each has limits. Raw evidence may omit a decisive variable; a drawn arrow may encode correlation; replaying an old observation after branching is not a valid counterfactual.</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-en" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>Construct an evidence-graded failure graph</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 820 280' role='img' aria-labelledby='cause-en-title cause-en-desc'><title id='cause-en-title'>Causal path and interception points for a wrong recipient</title><desc id='cause-en-desc'>A stale search result influences a model choice. An approval interface that omits the canonical address and a send tool without an address guard let the error pass. A resource receipt confirms wrong delivery. Arrows mark dependencies to test, not automatic blame. Either of two guards may block the outcome.</desc><rect x='14' y='22' width='170' height='75' rx='8' fill='#20312a'/><rect x='232' y='22' width='170' height='75' rx='8' fill='#20312a'/><rect x='450' y='22' width='170' height='75' rx='8' fill='#8e6935'/><rect x='668' y='22' width='138' height='75' rx='8' fill='#9f4939'/><rect x='232' y='177' width='170' height='78' rx='8' fill='#5c6251'/><rect x='450' y='177' width='170' height='78' rx='8' fill='#5c6251'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='52'>Stale retrieval</text><text x='27' y='76'>trigger candidate</text><text x='245' y='52'>Wrong model choice</text><text x='245' y='76'>propagation</text><text x='463' y='52'>Send tool executes</text><text x='463' y='76'>commit boundary</text><text x='681' y='52'>Wrong delivery</text><text x='681' y='76'>receipt</text><text x='245' y='207'>Approval shows ID?</text><text x='245' y='231'>guard A</text><text x='463' y='207'>Tool validates ID?</text><text x='463' y='231'>guard B</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M184 60H232'/><path d='M402 60H450'/><path d='M620 60H668'/><path d='M317 177V98'/><path d='M535 177V98'/></g></svg><figcaption>Original explanatory illustration: separate trigger, propagation, interception, and resource effect. Causal edges still require original evidence and safe intervention. Scroll horizontally on mobile.</figcaption></figure>
+      <h3>1. Fix the outcome and unit of analysis</h3><p>Define the failed variable for task T: within the approval window, the mail service delivered a report to canonical address B while the effective approval allowed only canonical address A. Use one task/run and one resource effect as the unit. Preserve goalVersion, approval version, address-normalization rule, time window, operation ID, and resource receipt. A model's “sent” statement is not the outcome. Nor does a client timeout prove “not sent”; it may be unknown until reconciled with the resource. If several spans refer to the same operation ID, count one wrong delivery.</p>
+      <h3>2. Make evidence nodes and grade edges</h3><p>Node types include external data, model inputs and decisions, authorization and human display, tool arguments and commit, resource observation, and acceptance verdict. Each node carries a reference to original evidence, versions, observer, time, and gaps. Type edges as call dependency, consumed data, authorization constraint, or resource effect. If the recorded model input actually contains the retrieved passage, the retrieval-to-model data-consumption edge is observed. If retrieval and a bad answer merely co-occur without an input record, that edge remains a hypothesis. An “approve” event on a screen that displayed only a name cannot establish that the person saw the email address.</p>
+      <h3>3. Separate four causal roles</h3><p>The outdated contact is a candidate trigger; the model's address selection propagates or transforms it; a screen that omits the canonical address and a tool without a recipient guard are interception gaps; the service receipt is effect evidence. A node may play several roles. Roles are not percentages of responsibility. “Which single repair could stop this path?” and “why did the wrong value first arise?” are different questions. An incident report should answer both rather than letting an early trigger erase the missing gates.</p>
+      <h3>4. Challenge edges with executable isolated comparisons</h3><p>In an environment without a real send capability, hold the task, approval snapshot, model and tool versions, and recorded boundary contract fixed. Independently replace the stale retrieval, display the full recipient identity at approval, and enable the pre-send address guard. State exactly what is changed each time, then regenerate downstream inputs and observations. Pasting an old model output after a new retrieval creates an inconsistent splice, not an intervention. Compare nodes, actions, and outcomes; mark a branch unsupported when its new observation cannot be obtained. An independent verifier evaluates canonical addresses and a simulated resource receipt rather than accepting model self-evaluation.</p>
+      <h3>5. Report one incident with several contributions</h3><p>Emit one incident ID and unique outcome, plus contribution records with evidence level, candidate mechanism, blocking intervention, and unobserved conditions. Component quality metrics may separately track stale-data rate, wrong-address proposal rate, and guard miss rate. The incident count remains one. When several failures are jointly required, record the combination. With insufficient evidence, keep unknown; assigning 25 percent to each of four components creates false precision.</p>
+      <pre><code>outcome = verify(resource_receipt, approved_recipient)
+graph = link(observed_events, consumed_inputs, policy_versions)
+for candidate in graph.paths_to(outcome):
+    label(candidate, evidence_level, role, missing_observations)
+    if safe_isolation_exists(candidate):
+        rerun_downstream_with_one_intervention(candidate)
+report_one_incident(outcome, contributions, unsupported_branches)</code></pre></div>
+      </section>
+      <section class="lesson-section" id="mathematics-en" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>Essential mathematics: necessary is not exclusive</h2></header>
+        <div class="section-copy"><p>Use a deliberately small model as an explanation, not as a substitute for the real system. Let X=1 mean retrieval supplied an outdated address, M=1 mean the model submitted the wrong address, G=1 mean the pre-send gate failed to intercept it, S=1 mean the resource actually sent, and Y=1 mean wrong delivery. A candidate structure is <code>M=f(X,P,U)</code> and <code>Y=M ∧ G ∧ S</code>. P is the prompt and approval context at the time. U contains unrecorded model and environment disturbances. The function f is a mechanism to test, not an assertion that X always forces M. The second equation says that on this simplified path, wrong selection, a missed gate, and an actual send are jointly needed. A real system may have another path, such as a tool rewriting the address; add it to the graph rather than forcing it into this equation.</p>
+      <p>For the observed run, if safely setting G to zero and re-executing downstream yields <code>Y(do(G=0))=0</code>, the gate could block <em>this path</em>. The do notation denotes active intervention, unlike selecting other historical tasks where G happened to be zero; those tasks may differ in risk or recipient type. If fixing X also yields Y=0, both X and G are useful intervention points. That is not contradictory and does not create two incidents. If U is unobserved, an external state cannot be fixed, or the send cannot safely be replayed, the evidence is conditional. Do not claim a complete counterfactual was proven.</p>
+      <p>Observe the missingness bias: a log may preserve model output but omit the approval screen. That does not make the model's contribution proven while the approval path is exonerated. Represent absent evidence as an unobserved variable and a concrete investigation request. Allocating responsibility percentages needs a separate objective and normative basis; these binary structural equations do not produce one.</p></div>
+      </section>
+      <section class="lesson-section" id="implications-en" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>Implications for agent systems</h2></header>
+        <div class="section-copy"><p><strong>Runtime capture:</strong> traceId alone is insufficient. Preserve taskId, operation ID, references to model input, versions of retrieved material actually consumed, fields shown at approval, authorization version, canonical tool arguments, resource receipt, and verifier result. Keep sensitive content behind access-controlled references; attribution does not justify dumping customer data into general logs. Align asynchronous callbacks through span links and business IDs, not clock order mistaken for dependency.</p>
+      <p><strong>Safety design:</strong> separate proposing a value from committing an irreversible action. Models and retrieval may propose addresses. At the commit boundary, deterministic checks compare canonical identity, contemporaneous approval scope, and resource state. The approval UI must display identity fields sufficient for judgment. A click cannot review parameters that were hidden from the person. A verifiable boundary guard is more dependable than hoping the model later explains why it missed an error.</p>
+      <p><strong>Evaluation and repair:</strong> turn one incident into layered regressions on the same causal chain: stale input, model conflict recognition, approval display, pre-send gate, and effect reconciliation. Each layer has its own denominator; whole-task success and incident count are measured separately. Repairing one layer still needs an end-to-end acceptance run because another path may bypass it.</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-en" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>Trade-offs and failure modes</h2></header>
+        <div class="section-copy"><p><strong>Temporal false positives:</strong> an earlier span supplies a possible order, not proof that its value was consumed. Parallel retrieval, caches, retries, and late callbacks produce misleading arrows. Without consumption evidence, downgrade the edge to a hypothesis; mark a branch unalignable when alignment fails.</p>
+      <p><strong>Counterfactual splicing:</strong> combining a new retrieval with the old model choice, then declaring “fixing data would not help,” fails to recompute downstream behavior. Isolated re-execution costs money and may face model nondeterminism. Start with deterministic gate comparisons; then use repeated whole-chain experiments to bound a claim, labeling environment limitations.</p>
+      <p><strong>Multiple sufficient paths:</strong> a repaired guard may leave a different tool path capable of a direct write. “One replay passed after one fix” can miss that path. Retain alternatives in the graph and challenge the release gate with end-to-end negative cases and authority boundaries.</p>
+      <p><strong>Evidence asymmetry between people and models:</strong> model output is often captured in detail while what the approver saw is not. Allocating cause by log volume will systematically favor the visible components. Record the approval display fields, action, and version with access controls, without unnecessary personal data. If absent, say unknown.</p>
+      <p><strong>Organizational attribution:</strong> causal contribution here is not personal fault, legal responsibility, or a team performance score. Google's SRE guidance on blameless postmortems emphasizes system conditions and improved controls. Produce testable repairs, residual risk, and evidence gaps rather than treating “model,” “tool,” and “human” as personified blame buckets.</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-en" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>Reusable judgments</h2></header>
+        <div class="section-copy"><ol><li>Define one resource-verifiable failed outcome and incident ID, then record several contributions. Do not count by span or component.</li><li>Temporal order, consumed data, authorization constraint, and causal interception are different relations; grade every edge by evidence.</li><li>Introducing a wrong value, propagating it, failing to intercept it, and proving an effect are different roles. First divergence does not monopolize cause.</li><li>A counterfactual must safely recompute downstream behavior. Keep unfixable observations unknown and run end-to-end acceptance after a repair.</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-en" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>Sources and evidence boundaries</h2></header>
+        <div class="section-copy"><ul><li><a href='https://www.microsoft.com/en-us/research/publication/time-clocks-ordering-events-distributed-system/'>Lamport, Time, Clocks, and the Ordering of Events in a Distributed System</a> — original paper on partial order in distributed events, not proof that temporal precedence is causal.</li><li><a href='https://www.w3.org/TR/prov-dm/'>W3C PROV-DM</a> — specification for entities, activities, generation, and use relations.</li><li><a href='https://opentelemetry.io/docs/concepts/signals/traces/'>OpenTelemetry Traces</a> — official documentation of spans, parent-child relationships, and links.</li><li><a href='https://arxiv.org/abs/1505.00162'>Halpern, A Modification of the Halpern-Pearl Definition of Causality</a> — author paper showing that formal actual-cause definitions require counterfactual conditions; we do not use that definition as an automatic responsibility allocator.</li><li><a href='https://sre.google/sre-book/postmortem-culture/'>Google SRE, Postmortem Culture</a> — official engineering guidance on blameless review and systemic improvement.</li></ul><p>Links and titles checked on 2026-11-24. The node taxonomy, evidence grades, incident counting rule, and isolated-intervention workflow are editorial engineering synthesis, not standards-based validation of any particular agent product.</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-en" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>Completed, open, and next</h2></header>
+        <div class="section-copy"><p><strong>Completed today:</strong> define failure by a unique resource effect; organize audit evidence into a typed, graded causal graph; separate trigger, propagation, missing interception, and effect evidence; use safe isolated interventions to test potential blocking without counting the incident once per component. The equation modeled one path and did not promote candidate edges into facts.</p><p><strong>Still open:</strong> a real system may have several harmful paths, some variables may be unobserved, and replay can vary with model and environment. Identifiable intervention matrices, common causes and interactions, marginal repair value, and residual risk need a separate treatment.</p><p><strong>Next starting point:</strong> Agent Failure Causality Internals 2/2 starts from today's typed graph and unique incident ID, then develops minimal blocking sets, confounding and non-identifiability, isolated A/B interventions, repeated trials, and a release gate without duplicate counting. It will not repeat generic trace fields or the four roles.</p></div>
+      </section>
+    </article>
+    <nav class="issue-nav" aria-label="Issue navigation"><a href="2026-11-23.html"><span data-nav-language="zh">← 上一篇</span><span data-nav-language="en" hidden>← Previous</span><strong data-nav-language="zh">有 Trace 和 Hash，怎样证明 Agent 昨天到底做了什么？</strong><strong data-nav-language="en" hidden>With a Trace and Hash, How Do We Establish What the Agent Actually Did?</strong></a><span></span></nav>
+  </main>
+  <script>
+(() => {
+  const switches = [...document.querySelectorAll("[data-set-language]")];
+  const lessons = [...document.querySelectorAll(".lesson[data-language]")];
+  function nearestSectionId() {
+    const visibleLesson = lessons.find((lesson) => !lesson.hidden);
+    if (!visibleLesson) return null;
+    const sections = [...visibleLesson.querySelectorAll("[data-section-id]")];
+    return sections.sort((a, b) => Math.abs(a.getBoundingClientRect().top - 100) - Math.abs(b.getBoundingClientRect().top - 100))[0]?.dataset.sectionId || null;
+  }
+  function setLanguage(language, preserveSection = false) {
+    if (!lessons.length) return;
+    const sectionId = preserveSection ? nearestSectionId() : null;
+    lessons.forEach((lesson) => { lesson.hidden = lesson.dataset.language !== language; });
+    document.querySelectorAll("[data-nav-language]").forEach((node) => { node.hidden = node.dataset.navLanguage !== language; });
+    switches.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.setLanguage === language)));
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    try { localStorage.setItem("ai-agent-deep-dive-language", language); } catch {}
+    if (sectionId) lessons.find((lesson) => lesson.dataset.language === language)?.querySelector('[data-section-id="' + sectionId + '"]')?.scrollIntoView({ block: "start" });
+  }
+  if (lessons.length) {
+    let stored = "zh";
+    try { stored = localStorage.getItem("ai-agent-deep-dive-language") || "zh"; } catch {}
+    setLanguage(stored === "en" ? "en" : "zh");
+    switches.forEach((button) => button.addEventListener("click", () => setLanguage(button.dataset.setLanguage, true)));
+  }
+  const search = document.querySelector("#archive-search");
+  if (search) search.addEventListener("input", () => {
+    const query = search.value.trim().toLowerCase();
+    const cards = [...document.querySelectorAll("[data-searchable]")];
+    let visible = 0;
+    cards.forEach((card) => { card.hidden = Boolean(query) && !card.dataset.searchable.includes(query); if (!card.hidden) visible += 1; });
+    const empty = document.querySelector(".empty-state");
+    if (empty) empty.hidden = visible !== 0;
+  });
+})();
+</script>
+</body>
+</html>
