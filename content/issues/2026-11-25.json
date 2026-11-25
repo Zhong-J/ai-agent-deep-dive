@@ -1,0 +1,153 @@
+{
+  "date": "2026-11-25",
+  "slug": "agent-failure-minimal-cuts-intervention-identifiability-release-gates",
+  "readingMinutes": 20,
+  "topicId": "agent-failure-minimal-cuts-intervention-identifiability-release-gates",
+  "series": {
+    "id": "agent-failure-causality-internals",
+    "title": {
+      "zh": "Agent Failure Causality Internals",
+      "en": "Agent Failure Causality Internals"
+    },
+    "part": 2,
+    "total": 2,
+    "complete": true
+  },
+  "title": {
+    "zh": "两个修复都让 Agent 不再发错人，哪个真正降低了风险？",
+    "en": "Two Fixes Stop the Agent’s Wrong Send. Which One Reduces Risk?"
+  },
+  "dek": {
+    "zh": "从故障因果图推导最小失效组合与阻断集，设计可识别的隔离干预和分层发布门；解释为什么一次重放通过与零失败样本都不能证明风险消失。",
+    "en": "Derive minimal failure combinations and blocking sets from the causal graph, design identifiable isolated interventions and a stratified release gate, and explain why one successful replay or zero observed failures cannot prove risk is gone."
+  },
+  "tags": [
+    "Causal attribution",
+    "Fault trees",
+    "Counterfactual tests",
+    "Identifiability",
+    "Release gates"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>昨天把“发错人”定义为一个资源侧可验收的事故，用 typed graph 分出过期检索、模型传播、审批和发送门禁的拦截缺口。现在团队做了两个 patch：A 修正联系人索引；B 在真正提交前比较规范化收件人 ID 与有效批准范围。各跑一次隔离重放都没有发错。产品负责人问哪个修复降低了生产风险、能否只发布一个。两次绿色结果不足以回答，因为它们只覆盖了同一条已知路径，另一路“工具在模型选择后改写地址”可能仍在。</p>\n      <p><strong>今日命题：</strong>从候选因果图到发布决策，必须先列出能产生顶层失败的不同最小失效组合，再找能击中全部相关路径的控制组合；用明确的干预矩阵测量每个控制对可比较任务的影响，并记录不能识别的变量。单次重放证明“这一次在这些条件下没有复现”，不证明生产失效率为零。</p>\n      <p>本文沿用昨天的唯一 incidentId 与证据等级，不重讲 trace 字段或“四种角色”。故障树是可推翻的工程假设，不是对某个人、模型或工具的预设责任判决。</p>",
+        "en": "<p>Yesterday defined a wrong-recipient delivery as one resource-verifiable incident. Its typed graph separated stale retrieval, model propagation, and missed interception at approval and send. Now the team has two patches. A updates the contact index. B compares the canonical recipient ID against effective approval scope immediately before commit. One isolated replay of each patch has no wrong send. A product lead asks which patch lowers production risk and whether only one is needed. The two green replays cannot answer. Both covered the known path, while a second path in which a tool rewrites the address after model selection may remain.</p>\n      <p><strong>Today's proposition:</strong> move from a candidate causal graph to a release decision by enumerating distinct minimal failure combinations that can produce the top event, then finding controls that hit every relevant path. Measure each control with a specified intervention matrix over comparable tasks and record variables that cannot be identified. A single replay establishes “this run, under these conditions, did not reproduce the failure,” not a zero production failure rate.</p>\n      <p>We retain yesterday's unique incident ID and evidence grades. This part does not repeat generic trace fields or the four causal roles. A fault tree is a falsifiable engineering hypothesis, not a verdict about a person, model, or tool.</p>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "从单一路径到故障树",
+        "en": "From one path to a fault tree"
+      },
+      "html": {
+        "zh": "<p>前篇的图说明一个错误值怎样经过模型、审批、工具到达资源；隔离干预要求下游重新计算，真实副作用不能重发。现在把视角从一条轨迹扩展到“同一种 outcome 可以由哪些路径产生”。一次事故只能给出一条已发生路径的证据；要评估 patch 是否足够，还需要设计审查、红队样本和历史近失事件寻找替代路径。不能因 trace 里没出现 W 就断言 W 不可能。</p>\n      <p>故障树术语把顶层事件用 AND/OR 连接到基本失效。本文借其组合逻辑；它不是从日志自动学出的真因果图。Halpern 的实际原因定义提醒我们，反事实在复杂场景中依赖清楚的背景条件。Hernán 与 Robins 的因果推断教材强调，观察到使用 patch 的任务更安全，不等于 patch 的效果：团队往往先把高风险任务送到人工审批，处理组与对照组原本就不同。这是混杂，必须在实验设计或结论范围里处理。</p>\n      <p>因此有三个不同问题：<em>结构覆盖</em>问控制是否能切断所有候选路径；<em>实验效果</em>问在指定任务分布中干预改变多少失败；<em>上线决策</em>问剩余风险是否在风险预算内且监测能发现新路径。它们不能用同一个通过率互相替代。</p>",
+        "en": "<p>Part 1 followed one wrong value through the model, approval, tool, and resource. It required downstream recomputation after an isolated intervention and prohibited replaying real effects. We now expand from one trajectory to all known paths that can produce the same outcome. One incident supplies evidence about one observed path. To judge whether a patch is enough, design review, adversarial cases, and historical near misses must search for alternatives. The absence of W in one trace does not show W is impossible.</p>\n      <p>Fault-tree terminology combines a top event from basic failures using AND and OR gates. We borrow that composition logic; it is not an automatically learned causal graph. Halpern's work on actual causality reminds us that counterfactual judgments depend on explicit background conditions. Hernán and Robins' causal-inference text explains why tasks that received a patch appearing safer does not by itself estimate the patch's effect: teams often route higher-risk tasks to human approval first. Treatment and comparison groups differ before treatment. This is confounding, which must be addressed in design or acknowledged as a limit.</p>\n      <p>Keep three questions separate. <em>Structural coverage</em> asks whether controls cut all candidate paths. <em>Experimental effect</em> asks how intervention changes failure in a specified task distribution. <em>Release readiness</em> asks whether residual risk is within a budget and monitoring can detect new paths. One pass rate cannot substitute for all three.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "从最小失效组合到干预矩阵",
+        "en": "From minimal cuts to intervention matrix"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 260' role='img' aria-labelledby='cuts-zh-title cuts-zh-desc'><title id='cuts-zh-title'>两条致害路径和最小阻断集</title><desc id='cuts-zh-desc'>路径一由过期检索 R、审批未拦截 A、提交门禁未拦截 G 同时组成；路径二由工具改写地址 W 与同一门禁未拦截 G 组成。两条路径任一成立即有错误投递风险。修复 G 可覆盖两条路径，修复 R 与 W 也可分别切断两条；图是待验证的候选模型。</desc><rect x='14' y='21' width='220' height='83' rx='8' fill='#20312a'/><rect x='14' y='148' width='220' height='83' rx='8' fill='#20312a'/><rect x='280' y='81' width='188' height='91' rx='8' fill='#9f4939'/><rect x='519' y='81' width='226' height='91' rx='8' fill='#8e6935'/><g fill='#fff' font-family='sans-serif' font-size='16'><text x='27' y='52'>路径一：R ∧ A ∧ G</text><text x='27' y='80'>数据 → 审批 → 门禁</text><text x='27' y='179'>路径二：W ∧ G</text><text x='27' y='207'>工具改写 → 门禁</text><text x='293' y='116'>错误投递 Y</text><text x='293' y='144'>路径一 或 路径二</text><text x='532' y='116'>阻断：修 G</text><text x='532' y='144'>或同时修 R、W</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M234 63H256V112H280'/><path d='M234 189H256V142H280'/><path d='M468 126H519'/></g></svg><figcaption>原创示意：最小割集是足以导致顶层故障的最小失效组合；阻断集必须击中每一条候选致害路径。手机可横向滑动。</figcaption></figure>\n      <h3>1. 列出可审查的失效逻辑</h3><p>先把顶层 Y 固定为“资源把报告投给未批准的规范化 ID”。候选路径一：R=过期联系人被消费，A=审批未拦截，G=提交门禁未拦截；路径二：W=工具在模型之后改写地址，G 同样未拦截。候选式 <code>Y=(R ∧ A ∧ G) ∨ (W ∧ G)</code> 假定资源提交确已执行；不能把一次 trace 中的共现直接当作 AND 关系。审查者要找证据：R 是否真的进入模型输入，审批屏幕是否显示规范化 ID，W 能否绕过门禁，G 是否覆盖所有发送入口。若 W 绕过门禁，必须改写公式，不能靠漂亮图保住结论。</p>\n      <h3>2. 求最小割集与阻断集</h3><p>在上述候选式下，最小割集是 {R,A,G} 和 {W,G}：任一集合全部失效可触发 Y；去掉任一成员则这条路径不成立。阻断集是需要修复的一组控制，必须与每个割集至少交一次。例如修 G 可阻断两条；同时修 R、W 也可；同时修 A、W 也可。只修 R 会留下 W 路径。这里的“最小”是集合包含意义上的最小，不等于实现成本、延迟或残余风险最低。若共享 G 自己有单点故障，可能仍值得加独立的 R/W 防线。</p>\n      <h3>3. 构造可比较的干预矩阵</h3><p>从已授权、可模拟的任务快照构造四格：旧/新检索 × 门禁关/开；再加 W 注入的负例和审批字段缺失的负例。固定目标、批准范围、工具契约、数据水位、模型版本及评判器，随机分配或配对任务到配置；同一任务可以在隔离环境跑多个配置，但每个配置必须重新生成下游模型输入、工具参数与模拟资源回执。记录配置、样本来源、风险层、seed、运行次数和未知边界。seed 只是配对方差控制的一部分，不保证输出字节相同。</p>\n      <h3>4. 检查可识别性与交互作用</h3><p>若所有高风险任务都只在新门禁下运行，而低风险任务只在旧门禁下运行，直接比较失败率会把任务风险混进 patch 效果。先在同一风险层内做隔离分配，再报告总体加权结果。若模型版本与门禁同时变了，不能从一个前后对比识别门禁单独效果。若 R 与 G 有交互作用——例如修 R 后模型不再提出错误地址，G 的拦截机会也减少——分别测量四格，不能把两个单独改善简单相加。不可固定的外部状态标 unsupported，不用旧 observation 拼接假分支。</p>\n      <h3>5. 把实验结果写成发布门</h3><p>发布门至少要求：所有已知高损失割集有覆盖与负例；隔离环境不具真实发送能力；每个风险层有资源侧 verifier；高风险层失败上界低于预先设定阈值；新路径的告警、停机与回退演练可用。出现未知路径、采集缺口或模型/工具版本漂移时，结论降级为“条件性通过”或停止发布。审计记录保留配置、样本与失败集合，让后来的人能重算，不让“绿灯”替代证据。</p>\n      <pre><code>paths = enumerate_candidate_cut_sets(graph, outcome)\ncontrols = choose_hitting_sets(paths, cost, independence)\nfor stratum in approved_task_strata:\n    for cell in intervention_matrix:\n        run_isolated(cell, stratum, recompute_downstream=true)\n        verify_resource_effect_and_authority()\nrelease_if(covered_paths && bounded_risk && rollback_ready)</code></pre>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 260' role='img' aria-labelledby='cuts-en-title cuts-en-desc'><title id='cuts-en-title'>Two harmful paths and minimal blocking sets</title><desc id='cuts-en-desc'>Path one requires stale retrieval R, missed approval A, and missed commit guard G. Path two requires tool address rewrite W and the same missed guard G. Either path can lead to wrong delivery. Repairing G blocks both; repairing R and W blocks one each. The diagram is a candidate model to validate.</desc><rect x='14' y='21' width='220' height='83' rx='8' fill='#20312a'/><rect x='14' y='148' width='220' height='83' rx='8' fill='#20312a'/><rect x='280' y='81' width='188' height='91' rx='8' fill='#9f4939'/><rect x='519' y='81' width='226' height='91' rx='8' fill='#8e6935'/><g fill='#fff' font-family='sans-serif' font-size='16'><text x='27' y='52'>Path one: R ∧ A ∧ G</text><text x='27' y='80'>data → approval → guard</text><text x='27' y='179'>Path two: W ∧ G</text><text x='27' y='207'>tool rewrite → guard</text><text x='293' y='116'>Wrong delivery Y</text><text x='293' y='144'>either path</text><text x='532' y='116'>Block: repair G</text><text x='532' y='144'>or repair R and W</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M234 63H256V112H280'/><path d='M234 189H256V142H280'/><path d='M468 126H519'/></g></svg><figcaption>Original explanatory illustration: a minimal cut set is a smallest sufficient failure combination for the top event; a blocking set must hit every candidate harmful path. Scroll horizontally on mobile.</figcaption></figure>\n      <h3>1. Write reviewable failure logic</h3><p>Fix top event Y as the resource delivering a report to an unapproved canonical ID. Candidate path one requires R, a stale contact actually consumed; A, approval failing to intercept; and G, the commit guard failing to intercept. Candidate path two requires W, a tool rewriting the address after model selection, and the same missed G. The candidate expression <code>Y=(R ∧ A ∧ G) ∨ (W ∧ G)</code> assumes a resource commit occurred. Mere co-occurrence in one trace does not establish an AND relation. Reviewers need evidence that R entered the model input, which canonical identity the approval screen showed, whether W can bypass the guard, and whether G covers every send entry point. If W bypasses G, change the formula instead of preserving a neat drawing.</p>\n      <h3>2. Derive minimal cut and blocking sets</h3><p>For that candidate expression the minimal cut sets are {R,A,G} and {W,G}. Every failure in either set together can trigger Y; removing any member breaks that particular path. A blocking set of repaired controls must intersect every cut set. Repairing G blocks both. Repairing R and W together also does; repairing A and W together is another option. R alone leaves the W path. “Minimal” means no proper subset works under this model. It says nothing about implementation cost, latency, or residual risk. If shared G is a common failure point, independent R or W defenses may still be worth retaining.</p>\n      <h3>3. Build a comparable intervention matrix</h3><p>Use authorized, simulatable task snapshots for four cells: old versus refreshed retrieval crossed with guard off versus on. Add negative cases that inject W and omit decisive approval fields. Hold goal, approval scope, tool contract, data watermark, model version, and verifier fixed. Randomly allocate or pair tasks across configurations. The same task may run through several isolated configurations, but each must regenerate downstream model input, tool arguments, and simulated resource receipt. Record configuration, sample origin, risk stratum, seed, repeat count, and volatile boundaries. A seed helps pair runs but does not guarantee byte-identical output.</p>\n      <h3>4. Examine identifiability and interaction</h3><p>If all high-risk tasks run only with the new guard while low-risk tasks run only with the old guard, a crude failure-rate comparison mixes task risk with patch effect. Allocate within comparable risk strata before reporting an overall weighted result. If the model version and guard changed together, one before-after contrast cannot isolate the guard effect. R and G may interact: after R is fixed, the model may propose fewer bad addresses, leaving G fewer opportunities to intercept. Measure all four cells rather than adding the two separate improvements. Mark unfixable external state unsupported; do not splice an old observation into a changed branch.</p>\n      <h3>5. Turn evidence into a release gate</h3><p>A release gate needs at least: coverage and negative cases for every known high-loss cut set; an isolated environment with no real send capability; a resource-side verifier in each risk stratum; an upper failure bound below a preregistered threshold for high-risk strata; and working alert, stop, and rollback drills for new paths. An unknown path, capture gap, or model/tool-version drift downgrades the claim to conditional evidence or stops release. Retain configurations, samples, and failures for recomputation. A green indicator is not the evidence itself.</p>\n      <pre><code>paths = enumerate_candidate_cut_sets(graph, outcome)\ncontrols = choose_hitting_sets(paths, cost, independence)\nfor stratum in approved_task_strata:\n    for cell in intervention_matrix:\n        run_isolated(cell, stratum, recompute_downstream=true)\n        verify_resource_effect_and_authority()\nrelease_if(covered_paths && bounded_risk && rollback_ready)</code></pre>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "必要数学：零失败与风险加权",
+        "en": "Essential mathematics: zero failures and weighted risk"
+      },
+      "html": {
+        "zh": "<p>令 <code>p_s(c)=P(Y=1 | do(C=c), Z=s)</code>：Z 是风险层标签，在层 s 主动设置控制配置 C=c 后，出现错误投递 Y 的概率。<code>do</code> 表示实验干预，不是观察到哪些线上任务恰好使用了 c。比较同层的 <code>Δ_s=p_s(old)-p_s(new)</code>，Δ 为正表示该层风险下降；若任务、审批或模型版本同时变化且未控制，Δ 不能归因于 patch。总体风险可写 <code>R(c)=Σ_s w_s · p_s(c) · L_s</code>，其中 w_s 是该层预期任务占比，L_s 是一次失败的损失权重。高损失层样本很少时，整体平均通过率可能很好而 R 仍不可接受。w、L 属于部署决策，须预先声明，不能事后为通过门槛调权重。</p>\n      <p>“300 次零失败”仍有统计上界。在独立、同分布、同一风险层且每次都能识别失败的简化假设下，<code>P(0 failures | p)=(1-p)^n</code>；n 是该层试验次数，p 是固定但未知的失败概率。把该概率设为 0.05，得到单侧约 95% 上界 <code>p_upper=1-0.05^(1/n)≈3/n</code>。n=300 时上界约 1%，不是零。若样本都来自同一模板、共享同一检索缓存，或 verifier 漏检，独立同分布和可观测假设破裂，这个数字不能用于真实总体。</p>\n      <p>实验不一定要给每个组件分一个“责任百分比”。同一错误可能由 {R,A,G} 的交互触发，阻断它的多个修复有重叠收益；把各自 Δ 相加会重复计算。报告每个风险层的配置效果、区间/上界、共同失效路径和证据限制，更接近发布决策所需的信息。</p>",
+        "en": "<p>Let <code>p_s(c)=P(Y=1 | do(C=c), Z=s)</code> be the probability of wrong delivery Y after actively setting control configuration C to c in risk stratum s; Z is the stratum label. The do operator means an experimental intervention, not merely observing which production tasks happened to use c. Compare configurations within a stratum using <code>Δ_s=p_s(old)-p_s(new)</code>; a positive Δ indicates reduced risk in that stratum. If tasks, approval policy, or model version also changed without control, Δ cannot be attributed to the patch. A deployment-level risk measure is <code>R(c)=Σ_s w_s · p_s(c) · L_s</code>, where w_s is the expected share of tasks in stratum s and L_s is the loss weight per failure there. A low average failure rate may coexist with unacceptable risk when high-loss strata are rare. Specify w and L before evaluation; changing them after seeing results undermines the gate.</p>\n      <p>Even “zero failures in 300 trials” has a statistical limit. Under simplified assumptions of independent, identically distributed trials within one stratum and perfect failure detection, <code>P(0 failures | p)=(1-p)^n</code>. Here n is the trial count and p is a fixed unknown failure probability. Set this probability to 0.05 to obtain an approximate one-sided 95% upper bound <code>p_upper=1-0.05^(1/n)≈3/n</code>. With n=300, that bound is about 1 percent, not zero. If all trials share one template or retrieval cache, or the verifier misses failures, the independence, identical-distribution, and observability assumptions break; the number no longer describes the broader deployment.</p>\n      <p>There is no need to assign every component a “responsibility percentage.” The same failure may require the interaction {R,A,G}, and several repairs may have overlapping benefit. Adding their separate Δ values double counts that benefit. For release decisions, report configuration effects and intervals or bounds by risk stratum, shared failure paths, and evidence limitations.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统的影响",
+        "en": "Implications for agent systems"
+      },
+      "html": {
+        "zh": "<p><strong>设计控制：</strong>共享提交门禁 G 能覆盖多条上游路径，但自己成为高价值单点。把规范化 ID 校验做成资源提交前的不可绕过约束，并用另一层独立的审批展示或数据新鲜度校验防止同类错误进入。每条入口都要验证，不能只在最常用 tool wrapper 加 if。</p>\n      <p><strong>测试系统：</strong>评测集应保留每个任务的风险层、数据水位、批准快照、工具版本、失败路径标签和资源侧 outcome。基于历史事故制作确定性负例，再用覆盖不同模板和模型随机性的样本估计失效率。隔离重放、离线评测和线上 canary 支持不同外推范围；任何实验都不能真实重发邮件。</p>\n      <p><strong>运营决策：</strong>给发布门配监控：错误收件人候选率、门禁拦截率、未授权资源效果、unknown 回执与新路径告警。门禁拦截率上升可能说明上游质量恶化，也可能说明门禁生效；要连同输入分布和资源效果看，不能把单指标当风险结论。风险预算、停机阈值与回退责任人要在发布前记录。</p>",
+        "en": "<p><strong>Control design:</strong> shared commit guard G covers several upstream paths but also becomes a valuable common point of failure. Make canonical identity validation an unavoidable pre-commit constraint, with an independent layer in approval display or data-freshness checks. Validate every send entry point, not just the most popular tool wrapper.</p>\n      <p><strong>Test system:</strong> store each evaluation task's risk stratum, data watermark, approval snapshot, tool version, failure-path label, and resource-side outcome. Derive deterministic negative cases from historical incidents, then estimate rates across diverse templates and model randomness. Isolated replay, offline evaluation, and an online canary support different generalization claims; none may resend real mail as a test.</p>\n      <p><strong>Operations:</strong> monitor wrong-recipient proposals, guard interception, unauthorized resource effects, unknown receipts, and alerts for new paths. A rising guard-interception rate could mean upstream quality worsened or the guard is working. Interpret it with input distribution and resource effects rather than as a standalone risk verdict. Record risk budget, stop threshold, and rollback owner before release.</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<p><strong>结构遗漏：</strong>割集只覆盖建模的路径。若存在另一个发送 API 绕开 G，最小阻断集 {G} 立即失效。设计审查应列出所有 commit 入口、权限和异步重试；资源侧未知回执必须先对账。</p>\n      <p><strong>混杂与选择偏差：</strong>线上人工审批通常集中在难题；把这些任务与自动化简单任务比较会高估或低估 patch 效果。匹配可观测任务属性仍不能消除未记录的难度。若无法随机化或隔离，报告关联与边界，不说“已证明修复导致下降”。</p>\n      <p><strong>样本外推：</strong>零失败上界只对被抽到且可检测的分布成立。新租户、语言、联系人格式、模型版本或工具入口改变后，旧上界可能不适用。发布门要带版本和覆盖范围，并把 drift 作为重新评测的触发条件。</p>\n      <p><strong>成本与隐私：</strong>四格加多风险层和重复采样会增加模型费用；可先做静态路径审查与确定性 guard 测试，把昂贵试验留给不确定和高损失层。保存原始地址与审批证据要有权限和保留期限，不能为归因扩大无控制的敏感日志。</p>\n      <p><strong>误把统计当证明：</strong>单侧上界是模型假设下的概率陈述，不是“生产绝无事故”的保证。NIST AI RMF 提供治理与测量风险的框架，但本文的割集、阈值和停机规则是编辑性工程设计，需由具体组织按损失与监管要求确定。</p>",
+        "en": "<p><strong>Missing structure:</strong> cut sets cover only modeled paths. An alternate send API that bypasses G immediately invalidates {G} as a blocking set. Design review must inventory commit entry points, authorities, and asynchronous retries. Reconcile unknown resource receipts before drawing conclusions.</p>\n      <p><strong>Confounding and selection:</strong> production human approval is often concentrated on hard tasks. Comparing those cases with easy automated tasks can exaggerate or hide patch effects. Matching observed task features cannot remove difficulty that was never recorded. Without randomization or isolation, report association and limits, not “proven causal reduction.”</p>\n      <p><strong>Generalization:</strong> the zero-failure bound applies only to the sampled, detectable distribution. New tenants, languages, contact formats, model versions, or tool entry points can invalidate it. Bind a release gate to versions and coverage and treat drift as a trigger for renewed evaluation.</p>\n      <p><strong>Cost and privacy:</strong> four configurations across risk strata and repeated samples cost model calls. First use static path review and deterministic guard tests; spend expensive experiments on uncertain, high-loss strata. Raw addresses and approval evidence need access and retention controls. Causal analysis is no reason to widen uncontrolled sensitive logs.</p>\n      <p><strong>Statistics mistaken for proof:</strong> a one-sided bound is a probabilistic statement under assumptions, not a guarantee of no production incident. The NIST AI RMF frames risk governance and measurement. Our cut sets, thresholds, and stop rules are editorial engineering design that each organization must set for its own loss and regulatory context.</p>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可以带走的判断",
+        "en": "Reusable judgments"
+      },
+      "html": {
+        "zh": "<ol><li>最小割集列出不同致害组合；修复集合要击中每条路径，单次重放通过不等于路径已覆盖。</li><li>比较 patch 效果时，在同一风险层改变一个或成组声明的条件并重算下游；前后相关不自动是因果。</li><li>零失败只给出有假设的上界，300 次零失败仍约有 1% 的 95% 上界；高损失层不能被总体平均掩盖。</li><li>发布门同时要求路径覆盖、资源侧验收、风险预算与回退演练，并随版本和输入漂移重新评估。</li></ol>",
+        "en": "<ol><li>Minimal cut sets expose distinct harmful combinations. A repair set must hit every path; one clean replay is not path coverage.</li><li>Estimate patch effects within comparable risk strata, changing declared conditions and recomputing downstream. A before-after association is not automatically causal.</li><li>Zero failures provide an assumption-bound upper limit. Even 300 zero-failure trials leave roughly a 1 percent one-sided 95 percent bound; an average must not hide a high-loss stratum.</li><li>A release gate combines path coverage, resource-side acceptance, risk budget, and rollback drills, and is reopened when versions or input distribution drift.</li></ol>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "来源与证据边界",
+        "en": "Sources and evidence boundaries"
+      },
+      "html": {
+        "zh": "<ul><li><a href='https://arxiv.org/abs/1505.00162'>Halpern, A Modification of the Halpern-Pearl Definition of Causality</a> — 作者论文；实际原因的反事实定义依赖背景条件，不把形式定义直接当责任分配。</li><li><a href='https://miguelhernan.org/whatifbook'>Hernán 与 Robins, Causal Inference: What If</a> — 作者提供的教材；用于区分干预效果、观察关联与混杂。</li><li><a href='https://sre.google/sre-book/postmortem-culture/'>Google SRE, Postmortem Culture</a> — 官方工程实践；支持复盘关注系统条件与可验证修复。</li><li><a href='https://www.nist.gov/itl/ai-risk-management-framework'>NIST AI Risk Management Framework</a> — 官方风险治理框架；本文不声称 NIST 规定了特定割集、阈值或 Agent 发布门。</li></ul><p>链接和标题于 2026-11-25 核验。故障树公式、干预矩阵、零失败上界的应用与发布门是本文针对假设案例的编辑性工程综合，不是某个产品当前表现的独立验证。</p>",
+        "en": "<ul><li><a href='https://arxiv.org/abs/1505.00162'>Halpern, A Modification of the Halpern-Pearl Definition of Causality</a> — author paper on counterfactual definitions of actual cause and their background conditions, not an automatic responsibility allocator.</li><li><a href='https://miguelhernan.org/whatifbook'>Hernán and Robins, Causal Inference: What If</a> — author-provided text on intervention effects, observational association, and confounding.</li><li><a href='https://sre.google/sre-book/postmortem-culture/'>Google SRE, Postmortem Culture</a> — official engineering guidance on systemic review and verifiable repair.</li><li><a href='https://www.nist.gov/itl/ai-risk-management-framework'>NIST AI Risk Management Framework</a> — official governance framework; it does not prescribe our particular cut sets, thresholds, or agent release gate.</li></ul><p>Links and titles checked on 2026-11-25. The fault-tree expression, intervention matrix, application of the zero-failure bound, and release gate are editorial engineering synthesis for a hypothetical case, not independent validation of a current product.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "专题收束与下一站",
+        "en": "Series close and next stop"
+      },
+      "html": {
+        "zh": "<p><strong>本专题已讲完：</strong>1/2 用唯一 incidentId 与资源效果定义失败，建有证据等级的 typed graph，分清触发、传播、拦截与效果，强调第一分歧不独占原因。2/2 从图列最小割集与阻断集，设计风险层内隔离干预、交互作用检查、零失败上界和发布门。合起来回答“哪个修复降低风险”：须先证明覆盖已知路径，再在可比较任务上估计效果，并明确仍未知的替代路径与外推范围。</p><p><strong>尚未讲完：</strong>本专题的结构分析、干预设计与发布决策链已闭合。具体组织的损失权重、审批法规、真实流量分布和可接受阈值需要本地数据，不能凭本文虚构。</p><p><strong>下一篇起点：</strong>回到系统路线，选择独立问题：当 Agent 的 verifier 本身也依赖模型、工具和不完整数据时，如何设计可校准、可升级的验证链，避免把“验证通过”当真值？明天不续讲本专题。</p>",
+        "en": "<p><strong>Completed in this series:</strong> Part 1 defined failure by one incident ID and resource effect, built an evidence-graded typed graph, separated trigger, propagation, interception, and effect, and showed why first divergence does not monopolize cause. Part 2 derived minimal cut and blocking sets, designed within-stratum isolated interventions, examined interaction, explained zero-failure bounds, and formed a release gate. Together they answer “which repair lowers risk?” by requiring known-path coverage, effects estimated on comparable tasks, and explicit unknown alternatives and generalization limits.</p><p><strong>Still open:</strong> structural analysis, intervention design, and release decision form a complete chain for this series. A specific organization's loss weights, approval regulation, live task distribution, and acceptable thresholds require local data and cannot be invented here.</p><p><strong>Next starting point:</strong> return to the systematic path with a separate question: if an agent's verifier also relies on models, tools, and incomplete data, how can we build a calibrated, escalatable verification chain without treating “passed verification” as ground truth? This series does not continue tomorrow.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "complete",
+    "established": {
+      "zh": [
+        "单一资源效果与 incidentId 定义失败，多组件贡献不重复计数；typed graph 的边需附证据等级",
+        "触发、传播、拦截与效果不同，时间先后和第一分歧不独占因果解释",
+        "最小割集描述候选致害组合，阻断集须覆盖每条路径；结构取决于完整的提交入口审查",
+        "隔离干预须在可比较风险层重算下游，零失败上界和发布门受样本、版本与检测能力限制"
+      ],
+      "en": [
+        "One resource effect and incident ID define failure; multiple contributions are not duplicate incidents, and typed graph edges carry evidence grades",
+        "Trigger, propagation, interception, and effect differ; temporal precedence and first divergence do not monopolize causal explanation",
+        "Minimal cut sets describe candidate harmful combinations; blocking sets cover every path, conditional on complete commit-entry review",
+        "Isolated interventions recompute downstream within comparable strata; zero-failure bounds and release gates are limited by samples, versions, and detection"
+      ]
+    },
+    "next": {
+      "zh": "本专题已完成；下一篇从 Agent verifier 也会出错出发，讨论可校准、可升级的验证链与独立真值边界。",
+      "en": "This series is complete; the next topic begins with fallible agent verifiers and asks how to build a calibrated, escalatable verification chain with an independent ground-truth boundary."
+    }
+  }
+}

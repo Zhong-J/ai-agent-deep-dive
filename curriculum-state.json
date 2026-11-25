@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-11-24",
-  "latestIssueDate": "2026-11-24",
+  "generatedAt": "2026-11-25",
+  "latestIssueDate": "2026-11-25",
   "completedTopics": [
+    "agent-failure-minimal-cuts-intervention-identifiability-release-gates",
     "agent-audit-bundle-integrity-first-divergence-versioning",
     "cross-domain-declassification-minimization-inference-evaluation",
     "multi-tool-context-dependency-closure-taint-evaluation",
@@ -30,6 +31,7 @@
     "llm-prefill-decode-kv-cache"
   ],
   "completedSeries": [
+    "agent-failure-causality-internals",
     "agent-reproducible-execution-internals",
     "cross-domain-agent-data-flow-internals",
     "multi-tool-working-context-internals",
@@ -58,6 +60,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-25",
+      "topicId": "agent-failure-minimal-cuts-intervention-identifiability-release-gates",
+      "seriesId": "agent-failure-causality-internals",
+      "part": 2,
+      "complete": true
+    },
     {
       "date": "2026-11-24",
       "topicId": "agent-failure-causal-graph-propagation-interception",
@@ -556,26 +565,5 @@
       "complete": false
     }
   ],
-  "pendingSeries": {
-    "id": "agent-failure-causality-internals",
-    "nextPart": 2,
-    "established": {
-      "zh": [
-        "失败结果以唯一资源效果和 incidentId 定义，多组件贡献不增加事故计数",
-        "typed graph 区分已观察调用/数据消费/授权/效果边与待证实因果候选，时间先后不是因果",
-        "触发、传播、拦截缺口、效果证据是不同角色；第一分歧不自动独占原因",
-        "隔离干预需重算下游且不得真实重发副作用，未知变量和不可重放边界保留 unknown"
-      ],
-      "en": [
-        "Define failure by a unique resource effect and incident ID; multiple component contributions do not increase the incident count",
-        "A typed graph separates observed call, data-consumption, authorization, and effect edges from causal hypotheses; temporal precedence is not causation",
-        "Trigger, propagation, interception gap, and effect evidence are distinct roles; first divergence does not monopolize cause",
-        "An isolated intervention recomputes downstream without repeating real effects; unknown variables and unreplayable boundaries remain unknown"
-      ]
-    },
-    "next": {
-      "zh": "Agent Failure Causality Internals 2/2：从 typed graph 和唯一 incidentId 出发，研究最小阻断集、混杂与不可识别、隔离干预矩阵、重复试验和发布门。",
-      "en": "Agent Failure Causality Internals 2/2: start from the typed graph and unique incident ID, then examine minimal blocking sets, confounding and non-identifiability, isolated intervention matrices, repeated trials, and release gates."
-    }
-  }
+  "pendingSeries": null
 }
