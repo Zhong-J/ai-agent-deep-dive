@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>Verifier 说“通过”，Agent 凭什么相信它？ · AI Agent Deep Dive</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body class="issue-page">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><i></i><span>AI Agent<br><b>Deep Dive</b></span></a>
+    <div class="language-switch" role="group" aria-label="Language">
+      <button type="button" data-set-language="zh" aria-pressed="true">中文</button>
+      <button type="button" data-set-language="en" aria-pressed="false">English</button>
+    </div>
+  </header>
+  <main>
+    <article class="lesson" data-language="zh">
+      <p class="kicker">Agent Verifier Reliability Internals · 第 1/2 篇</p>
+      <h1>Verifier 说“通过”，Agent 凭什么相信它？</h1>
+      <p class="dek">把 verifier 当成有误差的测量器：定义验收命题、证据来源与独立真值边界，拆开确定性检查、模型判断和资源效果，识别同源错误与弃权升级。</p>
+      <div class="issue-meta"><span>2026-11-26</span><span>约 20 分钟</span><span>Verifier reliability / LLM-as-judge / Ground truth / Correlated errors / Selective prediction</span></div>
+
+      <section class="lesson-section" id="proposition-zh" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>今日命题</h2></header>
+        <div class="section-copy"><p>一个 Agent 读取财务工作簿，写出“本季度收入同比增长 12%”。它的 verifier 看到候选答案和同一份检索摘要，给出“证据充分，PASS”。第二天财务人员发现摘要漏掉了工作簿中“已退款订单”筛选条件，正确口径只有 7%。执行模型和验证模型使用相同有缺陷的中间材料；两次语言模型判断一致，却没有两份独立证据。</p>
+      <p><strong>今日命题：</strong>verifier 的输出是关于目标是否达成的一个<strong>测量信号</strong>，不是目标本身。要让“通过”有工程含义，先固定验收命题、数据版本和授权边界，再明确 verifier 可以看哪些原始事实、哪些是执行者自述、它何时必须弃权，以及谁能独立裁决。不同错误类型需要不同检验器：语法、权限和资源效果不能全交给一个生成式模型。</p>
+      <p>本文讨论单次 Agent 任务中的验证链，与 10 月 2 日的 claim/evidence/verdict 账本、11 月 23 日的审计包、11 月 25 日的故障因果归因衔接；重点是 verifier 自身的误差结构。今天不把“又调用了一个模型”视为已增加独立性，也不把人工点击自动当作真值。</p></div>
+      </section>
+      <section class="lesson-section" id="connection-zh" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>把 Verifier 放回 Agent Loop</h2></header>
+        <div class="section-copy"><p>LLM 输出的 token 是条件分布中的采样结果。即使提示词写“请严格核实”，模型 verifier 仍是另一次条件生成；它可能偏好流畅、熟悉或符合候选答案措辞的解释。执行模型若把未经核验的摘要写进最终答案，verifier 再读这个摘要，两个判断会继承同一上游缺口。换一个模型供应商有时能改变错误模式，但共享证据和评分指令仍可制造相关错误，不能假设独立。</p>
+      <p>验证需要以任务合同为键：问题、允许的数据域、时间窗、计算口径、允许的工具效果及最低证据等级。对于收入计算，工作簿原始范围、筛选器、公式和数据快照是事实边界；“代理读到的摘要”只是候选证据。对于发邮件，规范化收件人、当时批准和服务端回执是事实边界；草稿或模型叙述不是投递证明。先定义 ground truth 的可获得范围，才能知道哪些 claim 可自动裁决、哪些必须标 unknown。</p>
+      <p>数学题 verifier 研究展示了额外的结果或过程监督可以改善特定基准中的选择，属于作者报告，不可直接外推为任何 Agent 业务验收有效。LLM-as-a-judge 研究也报告了位置、冗长等偏差。它们共同提醒工程团队：要验证 verifier 的行为和适用域，而不是把论文中的平均分当生产可靠性保证。</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-zh" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>分层验证、隔离证据与弃权</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 760 280' role='img' aria-labelledby='verify-zh-title verify-zh-desc'><title id='verify-zh-title'>Agent 验证链与独立真值边界</title><desc id='verify-zh-desc'>候选答案先经确定性契约与授权检查，再由模型 verifier 检查证据支持，最后由资源或人工独立读回裁决真实效果。任一检查可以通过、失败或弃权；模型 verifier 与执行模型共享证据时可能同错。</desc><rect x='14' y='22' width='164' height='77' rx='8' fill='#20312a'/><rect x='211' y='22' width='164' height='77' rx='8' fill='#20312a'/><rect x='408' y='22' width='164' height='77' rx='8' fill='#8e6935'/><rect x='605' y='22' width='141' height='77' rx='8' fill='#9f4939'/><rect x='211' y='174' width='164' height='78' rx='8' fill='#5c6251'/><rect x='408' y='174' width='164' height='78' rx='8' fill='#5c6251'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='53'>候选答案</text><text x='27' y='78'>claim + evidence</text><text x='224' y='53'>确定性检查</text><text x='224' y='78'>schema · authority</text><text x='421' y='53'>模型验证器</text><text x='421' y='78'>support · conflict</text><text x='618' y='53'>独立真值</text><text x='618' y='78'>truth / effect</text><text x='224' y='205'>失败 → 修正</text><text x='224' y='230'>retry budget</text><text x='421' y='205'>弃权 → 升级</text><text x='421' y='230'>human / tool</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M178 61H211'/><path d='M375 61H408'/><path d='M572 61H605'/><path d='M293 99V174'/><path d='M490 99V174'/></g></svg><figcaption>原创示意：模型 verifier 是一个有误差的测量器，不能代替资源侧效果或独立真值；弃权需要显式升级。手机可横向滑动。</figcaption></figure>
+      <h3>1. 将可验收命题拆小</h3><p>“报告正确”太宽。拆成可定位的子命题：收入范围来自批准版本的工作簿；退款过滤器生效；同比基期一致；文字结论与计算结果一致；最终外发对象被授权。每个子命题写 expected evidence、判定方式、版本和缺证处理。最终 verdict 是这些子命题按任务合同组合的结果，不能因为五项里四项 PASS 就把关键财务口径自动放行。</p>
+      <h3>2. 先跑确定性边界</h3><p>结构化 schema、数值范围、地址规范化、身份与权限、资源读回等能用确定性逻辑检查的部分，应在独立代码或资源侧执行。计算可从批准工作簿快照重新取数并重算，记录单元格、公式、筛选和 hash；这比让模型评论答案是否“看起来合理”更接近该命题的真值。若原始工作簿不可访问，结果是 evidence unavailable，而不是模型补一个 PASS。</p>
+      <h3>3. 模型只处理需要语义判断的缝隙</h3><p>例如判断文字结论是否忠实于已核算表格、是否遗漏限定条件。把候选答案和经过权限筛选的原始证据 span 分开提供；不要只把执行模型写的“引用摘要”回喂 verifier。要求 verifier 输出 claimId、引用的证据位置、冲突、不可见项和 PASS/FAIL/ABSTAIN，并在证据不足时允许 ABSTAIN。它的推理文本是调试线索，不是引用来源；引用必须可由独立程序读回。</p>
+      <h3>4. 控制信息泄漏与同源相关</h3><p>执行器和 verifier 若共用同一检索索引、摘要器、缓存与提示模板，可能同错。记录 evidence origin 与依赖关系；抽样在 verifier 侧直接读批准源，而非复用执行器生成的中间解释。高风险样本可使用不同检索路线或人工查核；但“不同模型”只是改变实现，不能替代源独立性。候选答案里含“经审计已确认”之类自证句应视为不可信输入。</p>
+      <h3>5. 把弃权和失败变成有界控制流</h3><p>FAIL 可触发一次有界修正，但修正后要重新验证受影响的子命题；不能让执行器反复改写直到 judge 愿意说 PASS。ABSTAIN 是缺证或超出 verifier 能力，升级到有权读源的工具/人工，并设置预算与超时。涉及不可逆写入时，没有满足最低证据等级的 PASS 就停在提交前。最终同时记录 verifier 版本、证据快照、所需权限和独立效果读回，便于以后复核。</p>
+      <pre><code>claims = decompose(task_contract, candidate)
+for claim in claims:
+    if deterministic_oracle_exists(claim):
+        verdict = check_original_source(claim)
+    else:
+        verdict = semantic_verifier(claim, independent_evidence_refs)
+    if verdict == ABSTAIN: route_to_authorized_adjudicator(claim)
+    if verdict == FAIL: bounded_repair_then_reverify(claim)
+commit_only_if(required_claims_pass && authority_valid)</code></pre></div>
+      </section>
+      <section class="lesson-section" id="mathematics-zh" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>必要数学：通过后还剩多少错误</h2></header>
+        <div class="section-copy"><p>令 B 表示候选答案实际有错，q=P(B) 是进入 verifier 的错误基率；t=P(nonpass | B) 是错误答案被 FAIL 或 ABSTAIN 阻止放行的比例；s=P(pass | not B) 是正确答案被明确放行的比例。nonpass 与 pass 在这项二元放行决策中互补，但运营记录仍须区分 FAIL 和 ABSTAIN，不能把弃权当正确。贝叶斯公式给出 <code>P(B | pass)=q(1-t)/[q(1-t)+(1-q)s]</code>。分子是“错误却放行”的概率，分母是所有被放行答案的概率；这个条件概率才接近用户关心的“PASS 中还有多少错”。</p>
+      <p>例：若在某一固定业务层 q=0.10、t=0.80、s=0.90，那么 <code>P(B | pass)=0.02/(0.02+0.81)≈2.4%</code>。即便 verifier 阻止八成错误答案放行，“通过”也不等于真值。数值只是说明机制的假设例子，不是任何真实模型的测量结果。若 q 因任务分布变化而升高，或者 t 在退款过滤器缺失这类切片下降，同一个“PASS”会变得更不可靠。</p>
+      <p>若 verifier 输出分数 r，阈值 τ 只放行 r≥τ 的样本，可以定义 <code>coverage(τ)=P(pass at τ)</code> 与 <code>risk(τ)=P(B | pass at τ)</code>。提高 τ 通常减少放行量，但不保证 risk 单调下降：分数可能未校准，流畅的错误答案反而高分。工程上要用独立标注的 held-out 样本按任务切片估计这条风险—覆盖曲线，并为弃权量配置真实升级容量；不能把模型吐出的 0.97 当 97% 正确概率。</p>
+      <p>任务级 PASS 还依赖子命题组合。若收入范围与退款过滤器两个检查共用同一错误摘要，它们的漏检相关；不能把两项单独准确率相乘来宣称总体漏检极低。应在完整任务上测量最终放行的错误率，并保存每个子命题的失败原因，才能发现共享上游依赖。</p></div>
+      </section>
+      <section class="lesson-section" id="implications-zh" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>对 Agent 系统的影响</h2></header>
+        <div class="section-copy"><p><strong>架构：</strong>verifier 必须有自己的输入合同、权限和版本，而不是执行模型输出后附一句“请复核”。可验证的源引用和资源读回构成数据接口；模型判断只覆盖语义缝隙。把检查移到副作用前，能用明确的未通过或弃权阻断提交；事后审查只能发现，不能撤回错误邮件。</p>
+      <p><strong>质量：</strong>需要保留 verifier 的 false pass、false flag 与 abstain 三种结果，并在各类任务、语言、数据源和风险层上计算。只看总体与人类一致率会掩盖关键切片。错误基率变化时，昨日的通过后错误率不能原样用于明天；上线要带版本、数据水位和抽样复核。</p>
+      <p><strong>经济性：</strong>确定性检查便宜且可解释，强模型或人工复核昂贵但能处理复杂语义。把高损失、低信号质量或证据冲突的任务升级，低风险且有权威读回的任务快速放行。升级不是失败，而是有预算的控制面行为；若队列容量不够，应限流或停在安全状态。</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-zh" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>取舍与失败模式</h2></header>
+        <div class="section-copy"><p><strong>循环自证：</strong>执行器写“财务已批准”，verifier 把这句当证据；或两者同读一个漏筛选的摘要。防线是按来源标注原文、派生物和自述，在关键 claim 上直接读源，记录共享依赖。两个模型的一致率不能替代来源独立性。</p>
+      <p><strong>过度信任标注：</strong>人工标签也可能错，特别是需要工作簿口径与授权历史的复杂任务。人工裁决要有明确任务合同、原始证据权限、双人复核或仲裁规则；分歧保留为分歧，不用多数票掩盖缺证。</p>
+      <p><strong>拒绝与漏检的取舍：</strong>阈值严格会把更多正常任务送入高成本升级队列，过松则增加 false pass。真正的门限取决于损失、基率和升级容量。只有总体通过率而没有误差分布，无法选这个门限。</p>
+      <p><strong>奖励黑客：</strong>若执行器训练或反复迭代时能看到同一个 verifier 的完整评分，它可能学会迎合检查样式而非修正事实。保留独立 holdout、轮换可验证负例，限制无限重试，并用资源侧真值抽查。数学 verifier 论文的作者报告说明某些训练设计有效，不证明任何被优化过的 verifier 永久可靠。</p>
+      <p><strong>权限与隐私：</strong>verifier 要读原始工作簿，但不应因此获得所有租户资料。按 claim 授权只读引用，最小化保留；无权限时弃权而非越权检索。审计记录保留足够复核的版本和引用，不把敏感原文复制进普通 trace。</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-zh" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>可以带走的判断</h2></header>
+        <div class="section-copy"><ol><li>verifier 的 PASS 是测量信号；只有任务合同、证据来源和独立真值边界明确时，它才有可审查含义。</li><li>能用确定性逻辑或资源读回验的 claim，先由它们判断；模型只处理语义缝隙并必须能弃权。</li><li>执行器与 verifier 共用摘要、索引或自述时会相关地错；增加模型数量不自动增加独立证据。</li><li>评估要看通过后的错误率与风险—覆盖曲线，按任务切片重测；模型分数不天然是正确概率。</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-zh" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>来源与证据边界</h2></header>
+        <div class="section-copy"><ul><li><a href='https://arxiv.org/abs/2110.14168'>Cobbe 等，Training Verifiers to Solve Math Word Problems</a> — 作者论文，报告数学题结果 verifier 的训练与基准表现，不能直接外推到业务任务。</li><li><a href='https://arxiv.org/abs/2305.20050'>Lightman 等，Let’s Verify Step by Step</a> — 作者论文，报告过程监督与结果监督在其数学设置的差异。</li><li><a href='https://arxiv.org/abs/2306.05685'>Zheng 等，Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena</a> — 作者报告模型 judge 的一致率与位置、冗长等偏差。</li><li><a href='https://arxiv.org/abs/1705.08500'>Geifman 与 El-Yaniv，Selective Classification for Deep Neural Networks</a> — 原始研究，提供弃权下风险与覆盖的形式化框架。</li><li><a href='https://arxiv.org/abs/1706.04599'>Guo 等，On Calibration of Modern Neural Networks</a> — 原始研究，支持区分预测分数与经验正确率。</li></ul><p>链接和标题于 2026-11-26 核验。本文的分层 Agent 验证链、权限与资源侧真值边界、公式例子和升级规则是编辑性工程综合，不是论文对某个现有产品行为的验证。</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-zh" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>已讲完、尚未讲完与下一篇</h2></header>
+        <div class="section-copy"><p><strong>今天已讲完：</strong>把 verifier 定义为有误差的测量器，拆分任务合同与子命题；确定性检查、语义判断和资源读回各有边界；同源证据可使执行器与 verifier 一起出错；PASS/FAIL/ABSTAIN 是有界控制流。贝叶斯例子说明“通过后仍有错”，模型分数须经实测校准。</p><p><strong>尚未讲完：</strong>如何在不同风险层测量 verifier 的误差与分数校准，选择升级阈值、组合多个相关检查器、分配人工容量，并在模型/数据漂移后决定停机或重新验证。</p><p><strong>下一篇起点：</strong>Agent Verifier Reliability Internals 2/2 从今天的子命题与独立证据引用出发，建立分层标注集、选择性风险—覆盖曲线、升级成本和线上复核门；不重讲“另一个模型为何会同错”。</p></div>
+      </section>
+    </article>
+    <article class="lesson" data-language="en" hidden>
+      <p class="kicker">Agent Verifier Reliability Internals · Part 1 of 2</p>
+      <h1>The Verifier Says “Pass.” Why Should the Agent Believe It?</h1>
+      <p class="dek">Treat the verifier as a fallible measurement device. Define the acceptance claim, evidence origin, and independent truth boundary; separate deterministic checks, model judgment, and resource effects; and handle correlated errors and abstention.</p>
+      <div class="issue-meta"><span>2026-11-26</span><span>20 min read</span><span>Verifier reliability / LLM-as-judge / Ground truth / Correlated errors / Selective prediction</span></div>
+
+      <section class="lesson-section" id="proposition-en" data-section-id="proposition">
+        <header class="section-label"><span>01</span><h2>Today's proposition</h2></header>
+        <div class="section-copy"><p>An agent reads a finance workbook and reports that quarterly revenue grew 12 percent year over year. Its verifier sees the candidate answer and the same retrieved summary and returns “evidence sufficient, PASS.” The next day finance finds that the summary omitted the workbook's refunded-order filter; the correct figure under the approved definition is 7 percent. The actor and verifier used the same defective intermediate material. Two language-model judgments agreed, but they were not two independent pieces of evidence.</p>
+      <p><strong>Today's proposition:</strong> a verifier output is a <strong>measurement signal</strong> about goal completion, not completion itself. Give “pass” an engineering meaning by fixing the acceptance claim, data version, and authorization boundary; specifying which original facts the verifier can inspect and which statements are actor self-reports; defining when it must abstain; and naming an independent adjudicator. Syntax, authority, and resource effects call for different checks, not one generative model asked to judge everything.</p>
+      <p>This concerns a verification chain inside a single agent task. It builds on the earlier claim/evidence/verdict ledger, audit bundle, and causal failure analysis, but focuses on the verifier's own error structure. A second model call is not automatically independent evidence, and a human click is not automatically ground truth.</p></div>
+      </section>
+      <section class="lesson-section" id="connection-en" data-section-id="connection">
+        <header class="section-label"><span>02</span><h2>Place the verifier inside the agent loop</h2></header>
+        <div class="section-copy"><p>An LLM's tokens are sampled from a conditional distribution. Even when prompted to “verify strictly,” a model verifier is another conditional generation. It may prefer fluent, familiar, or answer-congruent explanations. If the actor copied an unchecked summary into its answer and the verifier rereads that summary, both judgments inherit one upstream omission. A different model provider may change error modes, but shared evidence and scoring instructions can still correlate failures. Independence cannot be assumed from model count.</p>
+      <p>Verification is keyed to a task contract: question, permitted data domains, time window, calculation definition, allowed tool effects, and minimum evidence level. For revenue, the workbook's original ranges, filters, formulas, and snapshot define the fact boundary. An agent's retrieved summary is only candidate evidence. For an email, canonical recipient identity, contemporaneous approval, and server receipt define the fact boundary. A draft or model narrative does not prove delivery. Define where ground truth is available before deciding which claims can be automatically adjudicated and which must remain unknown.</p>
+      <p>Research on trained math verifiers reports improvements on particular benchmarks from outcome or process supervision; those are author-reported results, not a guarantee for business-task acceptance. LLM-as-a-judge research also reports biases such as position and verbosity. The engineering lesson is to measure a verifier's behavior and scope rather than importing a paper's average score as a production guarantee.</p></div>
+      </section>
+      <section class="lesson-section" id="mechanism-en" data-section-id="mechanism">
+        <header class="section-label"><span>03</span><h2>Layer checks, separate evidence, and abstain</h2></header>
+        <div class="section-copy"><figure class='diagram'><svg viewBox='0 0 760 280' role='img' aria-labelledby='verify-en-title verify-en-desc'><title id='verify-en-title'>Agent verification chain and independent truth boundary</title><desc id='verify-en-desc'>A candidate answer first passes deterministic contract and authority checks, then a model verifier checks evidential support, then a resource or authorized human independently reads back the actual effect. Each stage may pass, fail, or abstain. A model verifier may share an error with the actor when both consume the same evidence.</desc><rect x='14' y='22' width='164' height='77' rx='8' fill='#20312a'/><rect x='211' y='22' width='164' height='77' rx='8' fill='#20312a'/><rect x='408' y='22' width='164' height='77' rx='8' fill='#8e6935'/><rect x='605' y='22' width='141' height='77' rx='8' fill='#9f4939'/><rect x='211' y='174' width='164' height='78' rx='8' fill='#5c6251'/><rect x='408' y='174' width='164' height='78' rx='8' fill='#5c6251'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='53'>Candidate</text><text x='27' y='78'>claim + evidence</text><text x='224' y='53'>Contract check</text><text x='224' y='78'>schema · authority</text><text x='421' y='53'>Model verifier</text><text x='421' y='78'>support · conflict</text><text x='618' y='53'>Independent</text><text x='618' y='78'>truth / effect</text><text x='224' y='205'>Fail → repair</text><text x='224' y='230'>retry budget</text><text x='421' y='205'>Abstain → route</text><text x='421' y='230'>human / tool</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M178 61H211'/><path d='M375 61H408'/><path d='M572 61H605'/><path d='M293 99V174'/><path d='M490 99V174'/></g></svg><figcaption>Original explanatory illustration: a model verifier is a fallible measurement device, not a substitute for resource effects or independent truth; abstention requires explicit escalation. Scroll horizontally on mobile.</figcaption></figure>
+      <h3>1. Decompose the acceptance claim</h3><p>“The report is correct” is too broad. Make testable subclaims: the revenue range came from the approved workbook version; the refunded-order filter was applied; the year-over-year base period is consistent; prose matches computed values; the final recipient is authorized. Each subclaim names expected evidence, decision method, version, and missing-evidence behavior. The final verdict combines them under the task contract. Four passes out of five cannot silently excuse the decisive finance definition.</p>
+      <h3>2. Run deterministic boundary checks first</h3><p>Use independent code or resource-side checks for structured schemas, numerical ranges, canonical addresses, identity and authority, and resource readback. A calculator can retrieve the approved workbook snapshot and recompute from cells, formulas, and filters, recording their locations and hash. That is closer to the truth of this claim than asking a model whether the answer “looks reasonable.” If the original workbook is unavailable, the status is evidence unavailable, not a model-generated pass.</p>
+      <h3>3. Reserve model verification for semantic gaps</h3><p>A model may judge whether prose faithfully reflects already computed tables and whether qualifiers were omitted. Give it candidate text and authorized original evidence spans separately; do not feed only the actor's self-written citation summary back as evidence. Require claimId, evidence locations, conflicts, inaccessible items, and PASS, FAIL, or ABSTAIN. Allow ABSTAIN when evidence is insufficient. Its reasoning text helps debug the decision but is not a source citation; references must be retrievable by an independent program.</p>
+      <h3>4. Control leakage and common-source error</h3><p>If actor and verifier share the same retrieval index, summarizer, cache, and prompt template, they can fail together. Record evidence origin and dependencies. For sampled audits, let the verifier read the approved source directly rather than reuse the actor's intermediate explanation. High-risk cases may use an alternate retrieval path or authorized human review. A different model is only an implementation change, not source independence. A candidate answer claiming “audited and confirmed” remains untrusted input.</p>
+      <h3>5. Make abstention and failure bounded control flow</h3><p>FAIL can trigger one bounded repair, followed by verification of every affected subclaim. Do not let the actor rewrite repeatedly until the judge says PASS. ABSTAIN denotes missing evidence or a claim outside verifier competence; route it to a tool or human authorized to read the source, with budget and timeout. Before an irreversible write, stop unless required claims meet the minimum evidence level. Preserve verifier version, evidence snapshot, required authority, and independent effect readback for later review.</p>
+      <pre><code>claims = decompose(task_contract, candidate)
+for claim in claims:
+    if deterministic_oracle_exists(claim):
+        verdict = check_original_source(claim)
+    else:
+        verdict = semantic_verifier(claim, independent_evidence_refs)
+    if verdict == ABSTAIN: route_to_authorized_adjudicator(claim)
+    if verdict == FAIL: bounded_repair_then_reverify(claim)
+commit_only_if(required_claims_pass && authority_valid)</code></pre></div>
+      </section>
+      <section class="lesson-section" id="mathematics-en" data-section-id="mathematics">
+        <header class="section-label"><span>04</span><h2>Essential mathematics: errors among passes</h2></header>
+        <div class="section-copy"><p>Let B mean the candidate is actually wrong and q=P(B) be the error base rate entering the verifier. Let t=P(nonpass | B) be the proportion of bad candidates blocked by either FAIL or ABSTAIN, and s=P(pass | not B) be the proportion of correct candidates explicitly released. Nonpass and pass exhaust this binary release decision, although operations must still record FAIL and ABSTAIN separately rather than counting abstention as correctness. Bayes' rule gives <code>P(B | pass)=q(1-t)/[q(1-t)+(1-q)s]</code>. The numerator is “bad yet released”; the denominator is all released candidates. This conditional probability answers the practical question: how many passes remain wrong?</p>
+      <p>For an illustrative fixed business stratum with q=0.10, t=0.80, and s=0.90, <code>P(B | pass)=0.02/(0.02+0.81)≈2.4%</code>. Even a verifier that blocks four fifths of bad candidates does not turn PASS into truth. These are assumed numbers to explain the mechanism, not measured performance of a real model. If q rises as the task mix changes, or t drops on a slice such as missing refund filters, the same PASS becomes less trustworthy.</p>
+      <p>If the verifier emits a score r and only releases cases with r≥τ, define <code>coverage(τ)=P(pass at τ)</code> and <code>risk(τ)=P(B | pass at τ)</code>. Raising threshold τ usually lowers release volume, but need not reduce risk monotonically: a score may be uncalibrated and a fluent wrong answer may receive a high score. Estimate the risk-coverage curve on independently labeled held-out cases by task slice, and provision actual escalation capacity for abstentions. A model-emitted 0.97 is not automatically a 97 percent correctness probability.</p>
+      <p>Task-level PASS also combines subclaims. If the revenue-range check and refunded-order check both depend on the same faulty summary, their misses are correlated. Multiplying their separate accuracy numbers to claim a tiny joint miss rate would assume independence that the system lacks. Measure the error rate of final releases on complete tasks, while retaining per-subclaim failure reasons. This exposes common upstream dependencies and prevents an apparently strong collection of checks from concealing one shared blind spot.</p></div>
+      </section>
+      <section class="lesson-section" id="implications-en" data-section-id="implications">
+        <header class="section-label"><span>05</span><h2>Implications for agent systems</h2></header>
+        <div class="section-copy"><p><strong>Architecture:</strong> a verifier needs its own input contract, authority, and version, not an appended “please double-check” after actor output. Retrievable source references and resource readbacks form its data interface; model judgment handles semantic gaps. Put checks before side effects so FAIL or ABSTAIN can block commit. A post-hoc audit can detect but cannot unsend a wrong email.</p>
+      <p><strong>Quality:</strong> record false passes, false flags, and abstentions separately across task types, languages, data sources, and risk strata. Overall agreement with human judges can hide a decisive slice. When the error base rate changes, yesterday's post-pass error estimate does not carry unchanged into tomorrow. Bind deployment evidence to versions, data watermarks, and sampled re-adjudication.</p>
+      <p><strong>Economics:</strong> deterministic checks are cheap and explainable; strong models and human review cost more but handle difficult semantics. Escalate high-loss tasks, weak signals, and conflicting evidence; release low-risk tasks quickly when authoritative readback exists. Escalation is a budgeted control-plane action, not an embarrassment. If the queue lacks capacity, rate-limit or remain in a safe state.</p></div>
+      </section>
+      <section class="lesson-section" id="tradeoffs-en" data-section-id="tradeoffs">
+        <header class="section-label"><span>06</span><h2>Trade-offs and failure modes</h2></header>
+        <div class="section-copy"><p><strong>Circular self-certification:</strong> the actor writes “finance approved,” and the verifier treats that sentence as evidence; or both read a summary missing a filter. Label originals, derivatives, and self-reports by origin; read the source for decisive claims and record shared dependencies. Agreement between two models does not replace source independence.</p>
+      <p><strong>Overtrusted human labels:</strong> human adjudicators can be wrong too, especially when workbook definitions and historical approvals matter. Give them a fixed task contract, access to originals, and dual review or arbitration for disputes. Preserve disagreement instead of smoothing missing evidence with a majority vote.</p>
+      <p><strong>Abstention versus missed errors:</strong> a strict threshold routes more normal tasks into an expensive escalation queue; a loose one increases false passes. Loss, base rate, and escalation capacity determine the useful threshold. Overall pass rate without error distribution cannot set it.</p>
+      <p><strong>Reward hacking:</strong> an actor trained or repeatedly revised against one visible verifier can learn to satisfy its style rather than correct facts. Keep independent holdouts, rotate verifiable negative cases, bound retries, and sample resource-side truth. Author-reported results for math verifiers show some training designs work in their settings, not that any optimized verifier remains reliable indefinitely.</p>
+      <p><strong>Authority and privacy:</strong> a verifier may need original workbook access, but not every tenant's files. Authorize read-only references per claim and minimize retention. Without rights it abstains rather than retrieving across a boundary. Preserve versions and references sufficient for review without copying sensitive originals into a general trace.</p></div>
+      </section>
+      <section class="lesson-section" id="takeaways-en" data-section-id="takeaways">
+        <header class="section-label"><span>07</span><h2>Reusable judgments</h2></header>
+        <div class="section-copy"><ol><li>A verifier PASS is a measurement signal with an auditable meaning only when task contract, evidence origin, and independent truth boundary are explicit.</li><li>Use deterministic logic and resource readback first where available; let models handle semantic gaps with a real abstain path.</li><li>Actor and verifier can fail together when they share summaries, indexes, or self-reports; more models do not automatically mean independent evidence.</li><li>Measure error among passes and risk versus coverage by task slice. A model score is not inherently a probability of correctness.</li></ol></div>
+      </section>
+      <section class="lesson-section" id="sources-en" data-section-id="sources">
+        <header class="section-label"><span>08</span><h2>Sources and evidence boundaries</h2></header>
+        <div class="section-copy"><ul><li><a href='https://arxiv.org/abs/2110.14168'>Cobbe et al., Training Verifiers to Solve Math Word Problems</a> — author-reported training and benchmark results for math outcome verifiers, not a transfer claim for business tasks.</li><li><a href='https://arxiv.org/abs/2305.20050'>Lightman et al., Let’s Verify Step by Step</a> — author report comparing process and outcome supervision in its math setting.</li><li><a href='https://arxiv.org/abs/2306.05685'>Zheng et al., Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena</a> — author-reported judge agreement and biases including position and verbosity.</li><li><a href='https://arxiv.org/abs/1705.08500'>Geifman and El-Yaniv, Selective Classification for Deep Neural Networks</a> — original selective-risk and coverage framework with abstention.</li><li><a href='https://arxiv.org/abs/1706.04599'>Guo et al., On Calibration of Modern Neural Networks</a> — original work distinguishing predictive scores from empirical correctness.</li></ul><p>Links and titles checked on 2026-11-26. The layered agent verifier chain, authority and resource-side truth boundary, numerical example, and escalation rules are editorial engineering synthesis, not verification of current product behavior.</p></div>
+      </section>
+      <section class="lesson-section" id="continuity-en" data-section-id="continuity">
+        <header class="section-label"><span>09</span><h2>Completed, open, and next</h2></header>
+        <div class="section-copy"><p><strong>Completed today:</strong> treat a verifier as a fallible measurement device; decompose task contracts into subclaims; separate deterministic checks, semantic judgment, and resource readback; recognize correlated actor-verifier error from shared evidence; and make PASS, FAIL, and ABSTAIN bounded control flow. A Bayes example showed why passes can still be wrong and why model scores need empirical calibration.</p><p><strong>Still open:</strong> measure verifier error and score calibration across risk strata, choose escalation thresholds, combine correlated checks, provision human capacity, and decide when model or data drift requires stopping or renewed verification.</p><p><strong>Next starting point:</strong> Agent Verifier Reliability Internals 2/2 starts from today's subclaims and independent evidence references. It builds a stratified labeled set, a selective risk-coverage curve, escalation economics, and an online re-adjudication gate without repeating why another model can share the same mistake.</p></div>
+      </section>
+    </article>
+    <nav class="issue-nav" aria-label="Issue navigation"><a href="2026-11-25.html"><span data-nav-language="zh">← 上一篇</span><span data-nav-language="en" hidden>← Previous</span><strong data-nav-language="zh">两个修复都让 Agent 不再发错人，哪个真正降低了风险？</strong><strong data-nav-language="en" hidden>Two Fixes Stop the Agent’s Wrong Send. Which One Reduces Risk?</strong></a><span></span></nav>
+  </main>
+  <script>
+(() => {
+  const switches = [...document.querySelectorAll("[data-set-language]")];
+  const lessons = [...document.querySelectorAll(".lesson[data-language]")];
+  function nearestSectionId() {
+    const visibleLesson = lessons.find((lesson) => !lesson.hidden);
+    if (!visibleLesson) return null;
+    const sections = [...visibleLesson.querySelectorAll("[data-section-id]")];
+    return sections.sort((a, b) => Math.abs(a.getBoundingClientRect().top - 100) - Math.abs(b.getBoundingClientRect().top - 100))[0]?.dataset.sectionId || null;
+  }
+  function setLanguage(language, preserveSection = false) {
+    if (!lessons.length) return;
+    const sectionId = preserveSection ? nearestSectionId() : null;
+    lessons.forEach((lesson) => { lesson.hidden = lesson.dataset.language !== language; });
+    document.querySelectorAll("[data-nav-language]").forEach((node) => { node.hidden = node.dataset.navLanguage !== language; });
+    switches.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.setLanguage === language)));
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    try { localStorage.setItem("ai-agent-deep-dive-language", language); } catch {}
+    if (sectionId) lessons.find((lesson) => lesson.dataset.language === language)?.querySelector('[data-section-id="' + sectionId + '"]')?.scrollIntoView({ block: "start" });
+  }
+  if (lessons.length) {
+    let stored = "zh";
+    try { stored = localStorage.getItem("ai-agent-deep-dive-language") || "zh"; } catch {}
+    setLanguage(stored === "en" ? "en" : "zh");
+    switches.forEach((button) => button.addEventListener("click", () => setLanguage(button.dataset.setLanguage, true)));
+  }
+  const search = document.querySelector("#archive-search");
+  if (search) search.addEventListener("input", () => {
+    const query = search.value.trim().toLowerCase();
+    const cards = [...document.querySelectorAll("[data-searchable]")];
+    let visible = 0;
+    cards.forEach((card) => { card.hidden = Boolean(query) && !card.dataset.searchable.includes(query); if (!card.hidden) visible += 1; });
+    const empty = document.querySelector(".empty-state");
+    if (empty) empty.hidden = visible !== 0;
+  });
+})();
+</script>
+</body>
+</html>

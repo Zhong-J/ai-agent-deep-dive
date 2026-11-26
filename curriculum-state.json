@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-25",
-  "latestIssueDate": "2026-11-25",
+  "generatedAt": "2026-11-26",
+  "latestIssueDate": "2026-11-26",
   "completedTopics": [
     "agent-failure-minimal-cuts-intervention-identifiability-release-gates",
     "agent-audit-bundle-integrity-first-divergence-versioning",
@@ -60,6 +60,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-26",
+      "topicId": "agent-verifier-contract-independent-evidence-correlated-errors",
+      "seriesId": "agent-verifier-reliability-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-11-25",
       "topicId": "agent-failure-minimal-cuts-intervention-identifiability-release-gates",
@@ -565,5 +572,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "agent-verifier-reliability-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "verifier 的 PASS 是有误差的测量信号，必须绑定任务合同、子命题、证据来源和独立真值边界",
+        "确定性契约/授权检查、模型语义判断、资源侧效果读回分层进行；缺证时弃权并有界升级",
+        "执行器与 verifier 共享摘要或检索依赖时可相关地错，第二个模型不自动提供独立证据",
+        "通过后错误率受候选错误基率、检出率和正确放行率影响；分数与风险—覆盖需按任务切片实测"
+      ],
+      "en": [
+        "A verifier PASS is a fallible measurement tied to task contract, subclaims, evidence origin, and an independent truth boundary",
+        "Layer deterministic contract and authority checks, model semantic judgment, and resource-side readback; abstain and escalate with bounds when evidence is missing",
+        "Actor and verifier can have correlated error from shared summaries or retrieval; a second model is not automatically independent evidence",
+        "Error among passes depends on candidate error base rate, detection, and correct release; scores and risk-coverage require measurement by task slice"
+      ]
+    },
+    "next": {
+      "zh": "Agent Verifier Reliability Internals 2/2：从子命题与独立证据引用出发，建立分层标注集、选择性风险—覆盖曲线、升级成本和线上复核门。",
+      "en": "Agent Verifier Reliability Internals 2/2: start from subclaims and independent evidence references to build a stratified labeled set, selective risk-coverage curve, escalation economics, and an online re-adjudication gate."
+    }
+  }
 }
