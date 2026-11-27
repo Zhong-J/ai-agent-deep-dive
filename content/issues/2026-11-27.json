@@ -1,0 +1,153 @@
+{
+  "date": "2026-11-27",
+  "slug": "agent-verifier-calibration-selective-risk-escalation-online-audit",
+  "readingMinutes": 20,
+  "topicId": "agent-verifier-calibration-selective-risk-escalation-online-audit",
+  "series": {
+    "id": "agent-verifier-reliability-internals",
+    "title": {
+      "zh": "Agent Verifier Reliability Internals",
+      "en": "Agent Verifier Reliability Internals"
+    },
+    "part": 2,
+    "total": 2,
+    "complete": true
+  },
+  "title": {
+    "zh": "Verifier 校准后，Agent 该自动放行多少任务？",
+    "en": "After Calibrating a Verifier, How Many Agent Tasks Should Pass Automatically?"
+  },
+  "dek": {
+    "zh": "从独立标注和分层风险—覆盖曲线出发，为自动放行、弃权升级与人工容量选择门限；用线上抽样复核、漂移触发和资源侧真值守住发布边界。",
+    "en": "Use independent labels and stratified risk-coverage curves to choose auto-release thresholds, abstention routes, and human capacity; maintain the boundary with online sampled adjudication, drift triggers, and resource-side truth."
+  },
+  "tags": [
+    "Verifier calibration",
+    "Selective risk",
+    "Human escalation",
+    "Online audit",
+    "Release policy"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>昨天定义 verifier 的 PASS 为有误差的测量信号。现在评测报告说它“准确率 96%”，产品团队想把所有分数超过 0.8 的 Agent 任务自动放行。可是样本里大多数是短摘要，真正会外发的财务报告很少；高分错误常来自漏掉退款过滤器，人工复核队列每天只能处理 200 件。一个总体准确率既不回答“放行后有多少错”，也不告诉我们哪些任务该升级、队列是否会积压。</p>\n      <p><strong>今日命题：</strong>验证器上线应是一条按任务风险和证据支持域分层的选择性决策策略。要从独立真值样本估计每层的分数—错误关系与风险—覆盖曲线，以损失和升级容量定放行门限；再用线上抽样、资源侧效果和漂移触发持续修正。离线校准本身不是可靠性护身符，人工升级也不是无限容量的“兜底”。</p>\n      <p>本期完成 Agent Verifier Reliability Internals 2/2。它承接昨天的子命题、确定性/语义/资源分层和弃权控制流，不再讨论为什么第二个模型可能共享同一摘要错误。今天研究的是如何决定放行量，以及证据何时失效。</p>",
+        "en": "<p>Yesterday treated a verifier's PASS as a fallible measurement. Now an evaluation reports “96 percent accuracy,” and the product team wants every agent task with a score above 0.8 to pass automatically. Most labeled cases are short summaries. Few are finance reports that will be sent externally. High-scoring errors often omit a refunded-order filter, and the human review queue can handle only 200 cases a day. Overall accuracy answers neither how many released tasks are wrong nor which tasks should escalate, nor whether the queue will remain stable.</p>\n      <p><strong>Today's proposition:</strong> production verification is a selective decision policy stratified by task risk and evidence support. Use independently adjudicated cases to estimate score-error behavior and risk-coverage curves per stratum, choose release thresholds using loss and escalation capacity, then keep the policy under review through sampled online adjudication, resource effects, and drift triggers. Offline calibration is not a reliability talisman, and human escalation is not an unlimited fallback.</p>\n      <p>This closes Agent Verifier Reliability Internals 2/2. It builds on yesterday's subclaims, deterministic/semantic/resource layers, and abstention control flow. It does not repeat why a second model may inherit the same summary error. The question now is how much to release and when the evidence expires.</p>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "从 PASS 信号到放行策略",
+        "en": "From PASS signal to release policy"
+      },
+      "html": {
+        "zh": "<p>昨天的任务合同规定收入范围、退款过滤器、同比基期、文字结论与收件人授权必须分别可验；模型 verifier 只处理语义缝隙，工作簿重算和资源回执来自独立边界。对今天的策略来说，样本单位必须是<strong>完整任务及其必需子命题</strong>，而不是把一篇报告中的五个检查当五个独立成功。一个关键子命题漏检就可能让整项外发失败。</p>\n      <p>Selective Classification 研究把拒绝预测与已覆盖样本上的风险一起讨论；校准研究区分模型分数与经验正确率。我们借这两种框架设计 Agent 放行，但不把论文中的分类实验外推为任何业务 verifier 的性能。LLM-as-a-judge 研究报告了位置与冗长偏差，提醒我们分数还会受展示方式影响。Conformal Risk Control 提供在特定交换性等条件下控制风险的形式化方法；若任务随时间漂移、真值延迟或标签选择有偏，不能宣称它的保证自动成立。</p>\n      <p>需要把三类“正确”分开：verifier 预测与标注者一致，标注者依据原始事实的裁决正确，以及上线后真实资源效果符合授权。若标注者也只看执行器摘要，第一类分数再高也建立在同源错误上。离线数据必须能追到批准工作簿、计算口径和资源侧结果；不可见就标 unknown，不把它当负例或正例。</p>",
+        "en": "<p>Yesterday's task contract required separate checks for revenue range, refunded-order filter, comparison period, narrative conclusion, and recipient authority. A model verifier addressed semantic gaps; workbook recomputation and resource receipts came from independent boundaries. The unit for today's policy is the <strong>whole task with its required subclaims</strong>, not five independent successes extracted from one report. A miss on one decisive subclaim can make the external send wrong.</p>\n      <p>Selective-classification research studies risk on covered predictions together with rejection. Calibration research distinguishes model scores from empirical correctness. We borrow those frameworks for an agent release policy without importing a paper's classification performance into a business verifier. LLM-as-a-judge work reports biases from position and verbosity, so presentation can affect scores. Conformal Risk Control gives formal risk-control methods under conditions such as exchangeability. When tasks drift over time, truth is delayed, or labels are selected with bias, its guarantees do not simply carry over.</p>\n      <p>Separate three notions of correctness: verifier agreement with annotators, annotators' judgment against original facts, and production resource effects matching authorization. If annotators also see only the actor's summary, a strong score for the first notion sits on shared error. Offline cases need traceable access to the approved workbook, calculation definition, and resource-side outcome. Inaccessible facts are unknown, not a convenient positive or negative label.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "构造可上线的选择性验证策略",
+        "en": "Build a deployable selective-verification policy"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 280' role='img' aria-labelledby='cal-zh-title cal-zh-desc'><title id='cal-zh-title'>从独立标注到线上复核的验证器控制环</title><desc id='cal-zh-desc'>按任务风险和数据源分层的独立真值样本进入误差测量与分数校准，产生各层放行阈值与升级容量。线上自动放行、弃权和人工复核的结果反馈到抽样审计；漂移和资源侧错误触发停机与重新校准。</desc><rect x='14' y='22' width='174' height='76' rx='8' fill='#20312a'/><rect x='225' y='22' width='174' height='76' rx='8' fill='#20312a'/><rect x='436' y='22' width='174' height='76' rx='8' fill='#8e6935'/><rect x='225' y='170' width='174' height='83' rx='8' fill='#5c6251'/><rect x='436' y='170' width='174' height='83' rx='8' fill='#9f4939'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='52'>独立真值样本</text><text x='27' y='77'>slice · source</text><text x='238' y='52'>校准与风险曲线</text><text x='238' y='77'>error · coverage</text><text x='449' y='52'>分层路由策略</text><text x='449' y='77'>auto · escalate</text><text x='238' y='202'>线上抽样复核</text><text x='238' y='227'>truth · weights</text><text x='449' y='202'>漂移 / 停机</text><text x='449' y='227'>recalibrate</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 60H225'/><path d='M399 60H436'/><path d='M523 98V170'/><path d='M436 211H399'/><path d='M312 170V123H312V98'/></g></svg><figcaption>原创示意：阈值是按任务层与损失选出的控制策略，独立真值和线上抽样是持续复核的反馈，不是一次离线分数。手机可横向滑动。</figcaption></figure>\n      <h3>1. 建立独立且分层的标注集</h3><p>从真实任务类型抽取工作簿分析、短摘要、检索问答、外发写入等层；每层再保留语言、租户权限、证据来源、数据新鲜度和损失级别。标注者拿任务合同和受权原文重算或读回，不看 verifier 的 PASS 及解释，先作 PASS/FAIL/UNKNOWN 判定。争议案例做双人复核与仲裁，保留分歧。将同一工作簿、同一客户或同一模板的近重复任务按组切分，避免同源样本同时进调阈值集和最终评估集。</p>\n      <h3>2. 测量每层的分数与错误，而非一个准确率</h3><p>在冻结的 verifier 版本上记录原始分数、明确 PASS/FAIL/ABSTAIN、各子命题结论与资源侧 outcome。按分数分桶比较“高分中的真实正确率”，并画每个风险层的自动覆盖率对放行后错误率；对稀少但高损失层报告区间或上界，不被海量短摘要平均掉。把 UNKNOWN 单独报告并解释原因；删掉难标的任务会让曲线虚假乐观。对位置、长度、措辞扰动做稳健性切片，识别 judge 风格偏差。</p>\n      <h3>3. 选阈值时同时考虑损失与队列</h3><p>确定性授权或资源检查 FAIL 时无条件阻断；证据缺失则弃权。对剩余语义判断，低风险层可以在有足够样本支持的分数区间自动放行，高风险外发需要更严格门限或独立读回。超过人工容量的弃权任务不能偷偷转成 PASS；应限流、降低任务进入量或停在提交前。阈值由事前定义的每层最大错误损失与人工服务能力约束，不能看完测试再挑一个恰好过关的点。</p>\n      <h3>4. 测量多个 verifier 的共同漏检</h3><p>第二个模型或规则检查只有在补上不同证据路径时才可能增加覆盖。把两者在同一独立标注集上的错误做成四格：都对、A 错、B 错、都错；尤其看高损失任务的共同 false pass。若两个 judge 都读同一漏退款的摘要，联合错误可能很高。不能把两个单独错误率相乘来宣称极低联合风险。组合策略要明确“任一 FAIL 阻断”“两者冲突升级”及相应容量成本。</p>\n      <h3>5. 线上抽样复核并设置证据失效条件</h3><p>发布后按风险层抽样自动 PASS、ABSTAIN、人工放行和 FAIL，给有权审查者独立读原文与资源效果。高风险、低分边缘和新数据源可过采样，但估计总体率时须按抽样概率加权并报告分母。监测分数分布、错误类型、UNKNOWN、人工队列时延、权限/模型/索引版本及资源侧异常。出现新失败类型、某层上界越阈、标签覆盖下降或队列失稳时停自动放行、回滚或重标定；待真值未到时状态是 pending，不是成功。</p>\n      <pre><code>labels = adjudicate(original_sources, task_contract)\nfor slice in risk_slices:\n    curve = estimate_risk_coverage(verifier, labels[slice])\n    threshold[slice] = choose_under_loss_and_capacity(curve)\nif unsupported_slice or mandatory_check_failed: block_or_escalate()\nelse: route_by_slice_threshold_and_audit()\non_drift_or_new_error: stop_auto_release_and_revalidate()</code></pre>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 280' role='img' aria-labelledby='cal-en-title cal-en-desc'><title id='cal-en-title'>Verifier control loop from independent labels to online audit</title><desc id='cal-en-desc'>Independently adjudicated cases stratified by task risk and data source feed error measurement and score calibration. This yields per-stratum release thresholds and escalation capacity. Online auto-release, abstention, and human decisions feed sampled audit. Drift or resource-side error triggers stop and recalibration.</desc><rect x='14' y='22' width='174' height='76' rx='8' fill='#20312a'/><rect x='225' y='22' width='174' height='76' rx='8' fill='#20312a'/><rect x='436' y='22' width='174' height='76' rx='8' fill='#8e6935'/><rect x='225' y='170' width='174' height='83' rx='8' fill='#5c6251'/><rect x='436' y='170' width='174' height='83' rx='8' fill='#9f4939'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='52'>Adjudicated set</text><text x='27' y='77'>slice · source</text><text x='238' y='52'>Risk and calibration</text><text x='238' y='77'>error · coverage</text><text x='449' y='52'>Stratified policy</text><text x='449' y='77'>auto · escalate</text><text x='238' y='202'>Online sampled audit</text><text x='238' y='227'>truth · weights</text><text x='449' y='202'>Drift / stop</text><text x='449' y='227'>recalibrate</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M188 60H225'/><path d='M399 60H436'/><path d='M523 98V170'/><path d='M436 211H399'/><path d='M312 170V123H312V98'/></g></svg><figcaption>Original explanatory illustration: a threshold is a control policy chosen by task stratum and loss. Independent truth and online sampling form feedback, not a one-off offline score. Scroll horizontally on mobile.</figcaption></figure>\n      <h3>1. Build independent, stratified labels</h3><p>Sample real task types such as workbook analysis, short summaries, retrieval answers, and external writes. Within each, retain language, tenant authority, evidence source, data freshness, and loss severity. Give adjudicators the task contract and authorized originals to recompute or read back. Hide the verifier's PASS and rationale before they decide PASS, FAIL, or UNKNOWN. Use dual review and arbitration for disputes while retaining disagreement. Split near-duplicate cases by workbook, customer, or template group so related examples do not appear in both threshold-tuning and final evaluation sets.</p>\n      <h3>2. Measure scores and errors by stratum, not one accuracy number</h3><p>For a frozen verifier version, retain raw score, explicit PASS/FAIL/ABSTAIN, subclaim decisions, and resource-side outcomes. Compare empirical correctness within score bins and plot automatic coverage against error among released tasks for each risk stratum. Give rare high-loss strata intervals or upper bounds rather than burying them under many short summaries. Report UNKNOWN separately with reasons. Dropping hard-to-label cases makes the curve optimistically biased. Perturb answer position, length, and wording as robustness slices to expose judge presentation bias.</p>\n      <h3>3. Choose thresholds under loss and queue constraints</h3><p>A deterministic authority or resource check that fails blocks release regardless of score; missing evidence abstains. For remaining semantic judgments, a low-risk stratum may release automatically in a score range supported by adequate data, while high-risk external sends need a stricter threshold or independent readback. An abstention overflow cannot silently become PASS. Rate-limit intake, reduce task volume, or hold before commit. Choose thresholds against preregistered maximum loss by stratum and human service capacity, not by inspecting the test set for a conveniently passing point.</p>\n      <h3>4. Measure joint misses across verifiers</h3><p>A second model or rule helps only if it adds a distinct evidence path or catches different failures. Cross-tabulate both verifiers on the same independently labeled cases: both right, A wrong, B wrong, both wrong. Focus on joint false passes in high-loss tasks. If both judges read the same summary omitting refunds, the shared-error cell may be large. Multiplying their separate error rates to claim tiny joint risk would be unjustified. State the combination rule, such as “any FAIL blocks” or “disagreement escalates,” and account for its queue cost.</p>\n      <h3>5. Audit online and define evidence expiry</h3><p>After release, sample automatic passes, abstentions, human releases, and failures by risk stratum. Authorized reviewers independently read original sources and resource effects. Oversample high-risk cases, score-boundary cases, and new data sources, but weight by selection probability when estimating a population rate and report denominators. Monitor score distributions, error types, UNKNOWN, human queue delay, authority/model/index versions, and anomalous resource effects. A new failure type, stratum upper bound crossing its limit, falling label coverage, or an unstable queue stops automatic release and triggers rollback or recalibration. While truth is delayed, status is pending, not success.</p>\n      <pre><code>labels = adjudicate(original_sources, task_contract)\nfor slice in risk_slices:\n    curve = estimate_risk_coverage(verifier, labels[slice])\n    threshold[slice] = choose_under_loss_and_capacity(curve)\nif unsupported_slice or mandatory_check_failed: block_or_escalate()\nelse: route_by_slice_threshold_and_audit()\non_drift_or_new_error: stop_auto_release_and_revalidate()</code></pre>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "必要数学：风险—覆盖与升级容量",
+        "en": "Essential mathematics: risk, coverage, and escalation capacity"
+      },
+      "html": {
+        "zh": "<p>对任务层 s 与门限 τ，令 A_τ=1 表示 verifier 和所有必需确定性检查允许自动放行，B=1 表示独立裁决确认任务错误。定义 <code>C_s(τ)=P(A_τ=1 | S=s)</code> 为自动覆盖率，<code>R_s(τ)=P(B=1 | A_τ=1,S=s)</code> 为已放行任务中的错误率。S 是任务层标签，P 是在指定评估分布上的概率。提高 τ 通常减少 C，但未校准分数与切片偏差可能让 R 不按预期下降。业务门槛要约束每个高损失层的 R 上界，而不是只优化总体 C。</p>\n      <p>自动放行的期望损失可写 <code>L_auto(x)=p_bad(x)·D(x)</code>：x 是某类任务，p_bad 是在其层、版本与证据状态下放行后出错的估计概率，D 是一次错误的损失。升级的期望代价可写 <code>L_up(x)=c_review(x)+<wbr>p_bad_after_review(x)·D(x)+<wbr>c_delay(x)</code>；c_review 是人或强工具成本，p_bad_after_review 是升级后仍会出错的概率，c_delay 是等待损失。仅当自动放行的保守上界在风险预算内且低于可行升级方案时才自动放行；无法可靠估计 p_bad 的新层先弃权。这些值须由本地数据与损失政策确定，不能从模型自评直接读取。</p>\n      <p>升级也有物理容量。令 λ 是每小时进入人工队列的平均任务数，μ 是每小时可完成的平均审核数。若长期 <code>λ≥μ</code>，积压会增长，超时可能导致“默认通过”的危险捷径；即使 λ 略低于 μ，波峰和复杂任务也能拉长等待。工程上把预期升级率乘以实际到达量，预留峰值与停机余量，并测试队列溢出时系统是否安全阻断。</p>",
+        "en": "<p>For task stratum s and threshold τ, let A_τ=1 mean that the verifier and every mandatory deterministic check permit automatic release, and B=1 mean independent adjudication finds the whole task wrong. Define <code>C_s(τ)=P(A_τ=1 | S=s)</code> as automatic coverage and <code>R_s(τ)=P(B=1 | A_τ=1,S=s)</code> as error among released tasks. S labels the stratum; P is probability under the specified evaluation distribution. Raising τ normally lowers C, but an uncalibrated score or slice bias can make R behave unexpectedly. A business gate should bound R in each high-loss stratum, not merely maximize overall C.</p>\n      <p>Write expected loss from automatic release as <code>L_auto(x)=p_bad(x)·D(x)</code>. Here x is a task class, p_bad estimates error after release under its stratum, version, and evidence state, and D is loss per error. Escalation has expected cost <code>L_up(x)=c_review(x)+<wbr>p_bad_after_review(x)·D(x)+<wbr>c_delay(x)</code>, with reviewer or stronger-tool cost, residual error after review, and delay cost respectively. Release automatically only if a conservative upper bound on auto loss fits the risk budget and beats a feasible escalation route. A new stratum with unreliable p_bad estimation abstains first. Local data and loss policy determine these quantities; model self-ratings do not.</p>\n      <p>Escalation has physical capacity. Let λ be average arrivals to the human queue per hour and μ the average reviews completed per hour. Sustained <code>λ≥μ</code> grows backlog and may tempt an unsafe “default pass” on timeout. Even λ slightly below μ can still yield long waits during bursts or complex reviews. Multiply expected escalation rate by actual arrival volume, reserve peak capacity and stop margin, and test that queue overflow blocks safely.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统的影响",
+        "en": "Implications for agent systems"
+      },
+      "html": {
+        "zh": "<p><strong>验证接口：</strong>每次 verdict 记录 taskContractVersion、子命题、verifierVersion、score、thresholdPolicyVersion、evidenceRefs、origin、权限、风险层、PASS/FAIL/ABSTAIN 与资源效果。没有这些键，离线曲线无法映射到线上任务；一张“96% 准确率”图也不能复盘具体误放行。</p>\n      <p><strong>成本与延迟：</strong>自动放行扩大吞吐，但错误损失与补救成本可能远超一次人工审核。升级比例、人工排队、强工具调用和重复验证都进入任务级成本账本。可以让确定性计算覆盖高频且可验证的财务口径，模型 judge 只处理文字忠实性，把昂贵人工用于高损失且源证据冲突的任务。</p>\n      <p><strong>发布与运营：</strong>固定一次发布所依据的标注集、采样方案、任务分布、门限和上界。shadow 阶段观察但不自动放行；小流量阶段带资源侧抽样复核与明确停止规则。模型、索引、权限、工作簿口径变更时，旧校准不自动继续有效；检测到未知任务层或真值读回失败要降级到弃权。</p>",
+        "en": "<p><strong>Verification interface:</strong> every verdict records taskContractVersion, subclaims, verifierVersion, score, thresholdPolicyVersion, evidenceRefs, origin, authority, risk stratum, PASS/FAIL/ABSTAIN, and resource effect. Without these keys an offline curve cannot be mapped to online tasks, and a “96 percent accuracy” chart cannot explain a specific false release.</p>\n      <p><strong>Cost and latency:</strong> auto-release increases throughput, but error loss and remediation may dwarf one human review. Escalation fraction, human queueing, stronger tools, and repeated verification belong in the whole-task cost ledger. Deterministic computation can cover frequent, verifiable finance definitions; model judges handle prose fidelity; expensive human review focuses on high-loss cases with conflicting source evidence.</p>\n      <p><strong>Release and operations:</strong> freeze the labeled set, sampling plan, task mix, thresholds, and bounds supporting a release. Shadow mode observes without auto-release; a small canary includes resource-side sampled adjudication and explicit stop rules. A model, index, authority, or workbook-definition change does not inherit old calibration automatically. Unknown task strata or failed truth readback degrade to abstention.</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<p><strong>标签偏差：</strong>若人工只复核模型低分任务，线上 PASS 中的错误会长期不可见；若高风险过采样却不加权，总体错误率会被高估。抽样应保留每层分母和选中概率，UNKNOWN 不可静默删除。资源真值延迟时，报告成熟 cohort，不把尚未到期的样本算对。</p>\n      <p><strong>校准与选择偏差：</strong>整体 reliability diagram 可以接近对角线，但财务外发层仍严重失准。分数分桶太细时高损失层样本不足，太粗又掩盖局部高分错；报告区间和缺口，不用线条平滑掩盖不确定性。调门限与报告性能使用不同的分组留出集。</p>\n      <p><strong>形式保证条件：</strong>Conformal Risk Control 等方法在指定损失、样本选择和交换性条件下有理论控制，不能覆盖未标注的新租户、概念漂移或资源读回缺失。若条件破坏，称“监测到的经验风险”，不要声称 distribution-free 保证仍在。</p>\n      <p><strong>组合相关：</strong>两个 judge 的共同 false pass 在同源摘要失真时可能集中出现。不同模型、不同提示词也未必使错误独立；检查证据来源、共同漏检四格和端到端效果。规则检查器若只检验格式，也不能替代语义与授权判断。</p>\n      <p><strong>安全退化：</strong>人工队列爆满时默认放行、真值延迟时把 pending 当 PASS、抽样器故障时停止抽查，都会使原来的门限无效。必须有 backlog、标注覆盖和资源侧异常的停机条件，并演练回滚到只读或人工审批路径。</p>",
+        "en": "<p><strong>Label bias:</strong> if humans review only low-scored tasks, errors among online passes remain invisible. Oversampling high-risk cases without weighting can overstate population error. Retain each stratum's denominator and selection probability; never silently drop UNKNOWN. When resource truth arrives late, report mature cohorts rather than counting pending cases as correct.</p>\n      <p><strong>Calibration and selection bias:</strong> an aggregate reliability diagram can follow the diagonal while finance external-send cases are badly miscalibrated. Very fine score bins leave few high-loss examples; coarse bins hide localized high-score errors. Report intervals and gaps rather than smoothing away uncertainty. Use separate grouped holdouts for threshold selection and final performance reporting.</p>\n      <p><strong>Conditions for formal guarantees:</strong> methods such as Conformal Risk Control provide theoretical control for specified losses, sample selection, and exchangeability assumptions. They do not automatically cover an unlabeled new tenant, concept drift, or failed resource readback. When assumptions break, describe monitored empirical risk; do not keep claiming a distribution-free guarantee.</p>\n      <p><strong>Correlated combinations:</strong> joint false passes can cluster when a shared summary is defective. Different models and prompts need not make errors independent. Inspect evidence origins, the joint-error table, and end-to-end effects. A rule checker that validates only format cannot replace semantic and authorization checks.</p>\n      <p><strong>Unsafe degradation:</strong> default release when the human queue fills, treating delayed truth as PASS, or losing the audit sampler invalidates the original threshold policy. Define stop conditions for backlog, label coverage, and anomalous resource effects, and rehearse rollback to read-only or human-approved operation.</p>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可以带走的判断",
+        "en": "Reusable judgments"
+      },
+      "html": {
+        "zh": "<ol><li>验证器策略的单位是完整任务与必需子命题；按风险层报告自动覆盖和放行后错误率，不能用总体准确率代替。</li><li>门限要由独立标注、损失预算和升级容量共同决定；UNKNOWN、未支持层和资源真值缺口必须弃权。</li><li>多个 verifier 的收益取决于共同漏检与证据来源，不能乘单独准确率假定独立。</li><li>上线后持续抽样自动 PASS 与人工裁决，按抽样概率加权，并在漂移、队列失稳或新错误出现时停止自动放行。</li></ol>",
+        "en": "<ol><li>The policy unit is a whole task and its required subclaims. Report automatic coverage and post-release error by risk stratum, not just overall accuracy.</li><li>Choose thresholds from independent labels, loss budgets, and escalation capacity. UNKNOWN, unsupported strata, and missing resource truth abstain.</li><li>Extra verifiers help according to joint misses and evidence origin; do not multiply separate accuracies and assume independence.</li><li>Sample automatic passes and human decisions online, weight by selection probability, and stop auto-release on drift, queue instability, or new errors.</li></ol>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "来源与证据边界",
+        "en": "Sources and evidence boundaries"
+      },
+      "html": {
+        "zh": "<ul><li><a href='https://arxiv.org/abs/1705.08500'>Geifman 与 El-Yaniv，Selective Classification for Deep Neural Networks</a> — 原始研究，提供拒绝预测时风险—覆盖的形式框架。</li><li><a href='https://arxiv.org/abs/1706.04599'>Guo 等，On Calibration of Modern Neural Networks</a> — 原始研究，解释分数与经验正确率的校准；不是任何 Agent verifier 的性能报告。</li><li><a href='https://arxiv.org/abs/2208.02814'>Angelopoulos 等，Conformal Risk Control</a> — 作者论文，给出条件成立时的风险控制方法；本文不声称在线漂移下仍有该保证。</li><li><a href='https://arxiv.org/abs/2306.05685'>Zheng 等，Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena</a> — 作者报告 judge 一致率及位置、冗长偏差，不能直接外推业务任务。</li></ul><p>链接和标题于 2026-11-27 核验。本文的 Agent 任务分层、升级成本、采样复核和停止规则是编辑性工程综合；示例数值与队列容量均为假设，不表示某产品当前行为。</p>",
+        "en": "<ul><li><a href='https://arxiv.org/abs/1705.08500'>Geifman and El-Yaniv, Selective Classification for Deep Neural Networks</a> — original risk-coverage framework for rejection.</li><li><a href='https://arxiv.org/abs/1706.04599'>Guo et al., On Calibration of Modern Neural Networks</a> — original work on score versus empirical correctness, not a performance report for any agent verifier.</li><li><a href='https://arxiv.org/abs/2208.02814'>Angelopoulos et al., Conformal Risk Control</a> — author paper on risk control under stated conditions; no claim that its guarantee survives online drift.</li><li><a href='https://arxiv.org/abs/2306.05685'>Zheng et al., Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena</a> — author-reported agreement and position/verbosity biases, not directly transferable to business tasks.</li></ul><p>Links and titles checked on 2026-11-27. The agent task strata, escalation economics, sampled audit, and stop rules are editorial engineering synthesis. Example numbers and queue capacity are hypothetical, not statements about a current product.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "专题收束与下一站",
+        "en": "Series close and next stop"
+      },
+      "html": {
+        "zh": "<p><strong>本专题已讲完：</strong>1/2 将 PASS 视为有误差测量，固定任务合同与子命题，分开确定性、语义和资源侧证据，识别执行器与 verifier 的同源错误，并给出弃权升级边界。2/2 用独立标注、风险层、校准与风险—覆盖曲线选择自动放行量，再把损失、人工容量、联合漏检和线上抽样复核纳入发布策略。两篇共同回答：验证链的可信度来自可追溯真值、按层测量和可安全退化的控制流，不来自一个高分 PASS。</p><p><strong>尚未讲完：</strong>本专题的验证接口、测量和上线反馈链已闭合。具体损失权重、人工吞吐、各层阈值与真实错误率取决于组织数据，不能凭本文填写。</p><p><strong>下一篇起点：</strong>回到 LLM 内核路线，讨论 token 概率、熵与语义不确定性为何不等于任务成功概率，以及 Agent 何时能利用这些内部信号。明天不续讲本专题。</p>",
+        "en": "<p><strong>Completed in this series:</strong> Part 1 treated PASS as a fallible measurement, fixed task contracts and subclaims, separated deterministic, semantic, and resource evidence, identified shared actor-verifier error, and defined abstention. Part 2 used independent labels, risk strata, calibration, and risk-coverage curves to choose automatic release, then included loss, human capacity, joint misses, and online sampled adjudication in the policy. Together they show that trust comes from traceable truth, stratified measurement, and safe degradation, not one high-scored PASS.</p><p><strong>Still open:</strong> the verifier interface, measurement, and online feedback chain are complete for this series. Specific loss weights, human throughput, per-stratum thresholds, and actual error rates require organizational data and are not invented here.</p><p><strong>Next starting point:</strong> return to LLM internals: why token probabilities, entropy, and semantic uncertainty differ from whole-task success probability, and when an agent can use these internal signals. This series does not continue tomorrow.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "complete",
+    "established": {
+      "zh": [
+        "PASS 是有误差测量，必须绑定任务合同、子命题、证据来源和独立真值边界",
+        "确定性检查、模型语义判断与资源读回分层；共享证据导致执行器和 verifier 可能同错，缺证需弃权",
+        "自动覆盖与放行后错误率必须按风险层和完整任务在独立标注集上测量，分数需实测校准",
+        "放行门限由损失预算、升级容量和共同漏检决定，线上抽样复核与漂移停止规则保持证据有效"
+      ],
+      "en": [
+        "PASS is a fallible measurement tied to task contracts, subclaims, evidence origin, and independent truth",
+        "Layer deterministic checks, model semantic judgment, and resource readback; shared evidence can cause joint actor-verifier failure and missing evidence requires abstention",
+        "Measure automatic coverage and post-release error on independently labeled whole tasks by risk stratum, and calibrate scores empirically",
+        "Loss budget, escalation capacity, and joint misses set release thresholds; online sampled adjudication and drift stop rules maintain validity"
+      ]
+    },
+    "next": {
+      "zh": "本专题已完成；下一篇回到 LLM 内核，讨论 token 概率、熵与语义不确定性为何不等于 Agent 任务成功概率。",
+      "en": "This series is complete; the next topic returns to LLM internals and examines why token probability, entropy, and semantic uncertainty differ from agent task success probability."
+    }
+  }
+}
