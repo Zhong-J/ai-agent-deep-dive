@@ -1,0 +1,153 @@
+{
+  "date": "2026-11-28",
+  "slug": "llm-token-semantic-uncertainty-task-success-boundaries",
+  "readingMinutes": 20,
+  "topicId": "llm-token-semantic-uncertainty-task-success-boundaries",
+  "series": {
+    "id": "llm-uncertainty-internals",
+    "title": {
+      "zh": "LLM Uncertainty Internals",
+      "en": "LLM Uncertainty Internals"
+    },
+    "part": 1,
+    "total": 2,
+    "complete": false
+  },
+  "title": {
+    "zh": "模型给这个答案很高概率，Agent 为什么仍可能答错？",
+    "en": "The Model Gives This Answer High Probability. Why Might the Agent Still Be Wrong?"
+  },
+  "dek": {
+    "zh": "从 logits 和 token 熵出发，区分序列似然、语义答案概率与真实任务成功；解释分词、改写、采样和未知外部状态怎样让“模型很确定”失去决策含义。",
+    "en": "Start from logits and token entropy, then separate sequence likelihood, semantic-answer mass, and real task success. Explain how tokenization, paraphrase, sampling, and unknown external state make “the model is certain” a poor decision rule."
+  },
+  "tags": [
+    "LLM internals",
+    "Token probability",
+    "Entropy",
+    "Semantic uncertainty",
+    "Agent decisions"
+  ],
+  "sections": [
+    {
+      "id": "proposition",
+      "title": {
+        "zh": "今日命题",
+        "en": "Today's proposition"
+      },
+      "html": {
+        "zh": "<p>一个 Agent 被问“客户 A 的财务报告现在可以外发吗？”模型几乎总生成“可以”，并在生成这个词时给出很集中的 token 分布。它却没有读取今天的授权变更，也不知道报告是否混入客户 B 的数据。局部生成很稳定，只说明在当前文本前缀下模型倾向写“可以”；它并未测量这次外发的真实安全性。若 runtime 把这个高概率当作“任务成功概率 99%”，就会在最需要工具与权限核查的地方跳过它们。</p>\n      <p><strong>今日命题：</strong>token 概率、整段文本的序列似然、同一意思的答案概率、外部世界中的任务成功率，是四个不同的随机对象。我们可以从前一层构造后一层的某些估计，却需要额外的聚合、校准和环境观察。熵高不等于模型无知，熵低也不等于事实正确；只有定义“对什么不确定”，Agent 才能决定是继续检索、问人、运行工具，还是停止。</p>\n      <p>9 月 14 日已讲过 temperature、top-p 等怎样改变同一组 logits 的采样。今天不再比较解码菜单，而是解释概率读数究竟指向哪个事件。11 月 26–27 日讲的是 verifier 的放行误差；本期回到 LLM 内层，说明为什么 verifier 分数也不能从 token 分数直接获得。</p>",
+        "en": "<p>An agent is asked, “May customer A's finance report be sent externally now?” The model almost always generates “yes,” and the token distribution at that point is sharply concentrated. But it has not read today's authority change or checked whether the report mixes customer B's data. Stable local generation says only that “yes” is a likely continuation of the current text prefix. It does not measure the safety of this actual send. If the runtime treats high token probability as “99 percent task success,” it skips the tool and authority checks exactly where they matter most.</p>\n      <p><strong>Today's proposition:</strong> token probability, likelihood of a complete string, probability mass of an answer meaning, and success in the external world refer to four different random objects. Moving from one toward the next requires aggregation, calibration, and environmental observation. High entropy is not automatically ignorance; low entropy is not factual correctness. An agent can choose whether to retrieve, ask a person, use a tool, or stop only after specifying what uncertainty is about.</p>\n      <p>September 14 already examined how temperature and top-p change sampling from a fixed set of logits. We will not repeat the decoding menu. The issue here is what a probability reading actually measures. November 26–27 focused on verifier release errors; this part returns to the LLM's inner loop and explains why a verifier score cannot be read directly from token scores.</p>"
+      }
+    },
+    {
+      "id": "connection",
+      "title": {
+        "zh": "把模型内层信号接到 Agent 外层决策",
+        "en": "Connect model signals to agent decisions"
+      },
+      "html": {
+        "zh": "<p>Transformer 给每个位置的词表 token 一个 logit；softmax 变成“给定此前上下文，下一 token 是什么”的分布。这个分布是模型对训练任务所学条件模式的表达。它会受到提示词、检索片段、系统格式、已经生成的内容和解码规则影响。模型若在输入里看见“批准已完成”，也许会低熵地写“可以”；但这句话可能是未经验证的网页文本。概率集中是条件模式稳定，不是输入材料可信。</p>\n      <p>Agent 的外层状态还包括当前授权、工具结果、水位、真实资源效果和用户目标。模型 token loop 不直接观察这些变量，除非 runtime 把可靠 observation 放入上下文；即便放入，也可能被压缩、过期或误读。一个答案可以语言上连贯而业务上错误，也可以有多种措辞但都表达正确判断。只拿某一步的最大 token 概率路由，会混淆语言选择和行动质量。</p>\n      <p>语义不确定性研究试图把不同措辞的同义答案合并，再估计意义层的分歧；作者报告它能帮助发现某些自由生成场景中的幻觉，但它不是对 Agent 权限或实时工具效果的检测器。模型自评研究报告语言模型在一些问答设置中可预测自身对错，仍依赖任务与校准。本文把这些作为可用候选信号，明确不声称某个信号通用有效。</p>",
+        "en": "<p>A Transformer assigns a logit to each vocabulary token at each position. Softmax yields a distribution over the next token conditional on preceding context. This distribution expresses patterns learned for the model's training objective. Prompt wording, retrieved passages, system format, generated prefix, and decoding rules all affect it. If the input contains “approval complete,” the model may write “yes” with low entropy. Yet that phrase might be unverified web text. A concentrated distribution shows stable conditional continuation, not a trustworthy premise.</p>\n      <p>The outer agent state also includes current authority, tool results, data watermarks, actual resource effects, and the user's goal. The token loop does not observe these variables unless the runtime supplies reliable observations in context. Even then they may be compressed, stale, or misread. An answer can be linguistically coherent but operationally wrong. Several very different wordings can express the same correct judgment. Routing by one step's maximum token probability confuses language choice with action quality.</p>\n      <p>Semantic-uncertainty research merges paraphrases and estimates disagreement at the level of meanings. The authors report usefulness for some free-form hallucination detection settings; it is not a detector of agent permissions or live tool effects. Work on model self-evaluation reports that language models can predict correctness in some question-answering settings, again subject to task and calibration. These are candidate signals, not universal guarantees.</p>"
+      }
+    },
+    {
+      "id": "mechanism",
+      "title": {
+        "zh": "四层概率怎样逐步变化",
+        "en": "How probability changes across four layers"
+      },
+      "html": {
+        "zh": "<figure class='diagram'><svg viewBox='0 0 760 240' role='img' aria-labelledby='unc-zh-title unc-zh-desc'><title id='unc-zh-title'>四层不同的不确定性对象</title><desc id='unc-zh-desc'>同一上下文下的 token 分布组合成字符串概率；同义字符串聚成语义答案；真实任务成功还取决于检索事实、权限、工具执行与环境。每层聚合与外部验证都增加新假设，不能把前一层概率直接当后一层成功率。</desc><rect x='14' y='34' width='160' height='94' rx='8' fill='#20312a'/><rect x='204' y='34' width='160' height='94' rx='8' fill='#20312a'/><rect x='394' y='34' width='160' height='94' rx='8' fill='#8e6935'/><rect x='584' y='34' width='162' height='94' rx='8' fill='#9f4939'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='68'>下一个 token</text><text x='27' y='96'>p(v | prefix)</text><text x='217' y='68'>整段字符串</text><text x='217' y='96'>P(y | x)</text><text x='407' y='68'>语义答案簇</text><text x='407' y='96'>P(C | x)</text><text x='597' y='68'>真实任务结果</text><text x='597' y='96'>P(success)</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M174 81H204'/><path d='M364 81H394'/><path d='M554 81H584'/></g><g fill='#514d44' font-family='sans-serif' font-size='14'><text x='20' y='179'>局部生成选择</text><text x='208' y='179'>长度与分词</text><text x='398' y='179'>同义合并误差</text><text x='588' y='179'>工具/权限/事实</text></g></svg><figcaption>原创示意：局部 token 熵、序列似然、语义簇概率与任务成功率回答不同问题；右侧需要独立环境证据。手机可横向滑动。</figcaption></figure>\n      <h3>1. 先固定要读的是哪个 token 分布</h3><p>记录模型版本、完整输入、当前位置、原始 logits 和解码参数。原始 softmax、经 temperature 调整后的分布、top-p 截断并重新归一化的分布，不是同一对象。若服务只给出生成 token 的 logprob，而不给完整词表分布，就不能计算精确 token 熵。若服务没有暴露 logits，更不能从最终文字倒推出“模型当时有多确定”。同样的中文词还可能被拆成不同 token；比较跨模型单 token 概率往往没有共同单位。</p>\n      <h3>2. 从局部分布得到字符串似然</h3><p>对完整回答逐 token 相乘，或在 log 空间求和，可得到该字符串在给定上下文下的模型似然。但“批准了吗？”的“可以”“已获批准”“批准范围内可发送”分属不同 token 序列。长回答有更多乘法因子，原始序列概率通常更小；按长度平均可缓和长度偏差，却改变了分数含义。若两个候选答案分词长度不同，拿整句概率大小当“哪句更真实”没有数学根据。</p>\n      <h3>3. 聚合为意义，而不把改写当分歧</h3><p>对同一问题采样多次，按双向蕴含或任务等价规则把回答聚成“允许发送”“不允许发送”“条件不足”等簇。一个簇里的“可以”和“满足授权后可以”未必等价：后者有前提，自动聚类容易合错。意义簇的概率理论上是所有等价字符串概率之和；实际只能用有限样本、模型判别或权重近似，漏掉稀有但高风险的答案。多次采样若共用同一缺失权限信息，可能一致地答错，低语义熵仍不等于正确。</p>\n      <h3>4. 接上外部事实与行动结果</h3><p>要估计“外发成功且合规”，还得验证批准对象、数据域、当前状态、工具参数与资源回执。模型答案簇只说明它倾向表达哪种判断，不包含未知的今天权限变更。若缺失关键 observation，正确的控制流是检索有权源、调用只读检查工具或交人工；不可逆写入前用确定性授权门禁。模型内层信号可决定“哪里值得再查”，不能代替“是否允许提交”。</p>\n      <h3>5. 记录可复核的信号定义</h3><p>对每个不确定性特征保存：计算位置、原始/截断分布、tokenizer、采样次数、语义聚类规则、版本、任务切片与缺失源。再用独立标注的任务 outcome 测试它在该切片能否预测错误或工具需求。没有这种契约，“entropy=0.2”连单位与适用范围都不清楚。Agent 可以把它当诊断特征，但不应把它硬编码为全域成功率。</p>\n      <pre><code>signal = inspect_logits(model, exact_prefix, decoder_config)\nsamples = sample_answers(model, exact_context, n)\nclasses = cluster_by_task_meaning(samples)\nif authority_or_current_fact_missing: read_authoritative_source()\nif action_is_irreversible: require_independent_commit_guard()</code></pre>",
+        "en": "<figure class='diagram'><svg viewBox='0 0 760 240' role='img' aria-labelledby='unc-en-title unc-en-desc'><title id='unc-en-title'>Four distinct uncertainty objects</title><desc id='unc-en-desc'>A token distribution under a context composes into sequence probabilities. Paraphrased strings form semantic-answer classes. Real task success also depends on retrieved facts, authority, tool execution, and environment. Each aggregation and external verification adds assumptions; a probability at one layer is not automatically success probability at the next.</desc><rect x='14' y='34' width='160' height='94' rx='8' fill='#20312a'/><rect x='204' y='34' width='160' height='94' rx='8' fill='#20312a'/><rect x='394' y='34' width='160' height='94' rx='8' fill='#8e6935'/><rect x='584' y='34' width='162' height='94' rx='8' fill='#9f4939'/><g fill='#fff' font-family='sans-serif' font-size='15'><text x='27' y='68'>Next token</text><text x='27' y='96'>p(v | prefix)</text><text x='217' y='68'>Full sequence</text><text x='217' y='96'>P(y | x)</text><text x='407' y='68'>Meaning class</text><text x='407' y='96'>P(C | x)</text><text x='597' y='68'>Task outcome</text><text x='597' y='96'>P(success)</text></g><g stroke='#8b7b68' stroke-width='3' fill='none'><path d='M174 81H204'/><path d='M364 81H394'/><path d='M554 81H584'/></g><g fill='#514d44' font-family='sans-serif' font-size='14'><text x='20' y='179'>local choice</text><text x='208' y='179'>length & tokens</text><text x='398' y='179'>cluster error</text><text x='588' y='179'>tools/rights/facts</text></g></svg><figcaption>Original explanatory illustration: local token entropy, sequence likelihood, semantic-cluster mass, and task success answer different questions. The right side needs independent environmental evidence. Scroll horizontally on mobile.</figcaption></figure>\n      <h3>1. Specify which token distribution is observed</h3><p>Record model version, full input, position, raw logits, and decoding configuration. Raw softmax, a temperature-adjusted distribution, and a top-p-truncated, renormalized distribution are different objects. A service that exposes only the log probability of generated tokens, not the full vocabulary distribution, cannot provide exact token entropy. If logits are unavailable, final text cannot reveal how concentrated the model's distribution was. One Chinese word may split into different token sequences across tokenizers; a single-token probability often has no shared unit across models.</p>\n      <h3>2. Compose local probabilities into string likelihood</h3><p>Multiply per-token probabilities for a full answer, or sum their logarithms, to get its model likelihood given the context. “Yes,” “approval is recorded,” and “send only within approved scope” are different token sequences. A long answer has more factors, so its raw sequence probability is usually smaller. Average log probability per token softens length bias but changes the score's meaning. Comparing sentence likelihoods with different tokenizations does not establish which sentence is factually true.</p>\n      <h3>3. Aggregate meanings without treating paraphrase as disagreement</h3><p>Sample the same question several times and group answers into “send allowed,” “send prohibited,” and “insufficient conditions” using bidirectional entailment or a task-specific equivalence rule. “Yes” and “yes after authorization” are not necessarily equivalent; the latter carries a condition that a clustering model may erase. A meaning class theoretically accumulates probability from every equivalent string. In practice finite samples, model-assisted clustering, and weights approximate that mass, possibly missing rare high-risk answers. Repeated samples sharing the same absent authority fact can agree on the wrong answer. Low semantic entropy is still not correctness.</p>\n      <h3>4. Join external facts and action effects</h3><p>Estimating “the send succeeds and is authorized” requires checking the approved recipient, data domain, current state, tool arguments, and resource receipt. A model answer class says which judgment the model tends to express; it does not contain today's unknown permission change. If a decisive observation is absent, the control flow should retrieve an authorized source, call a read-only check, or ask a human. An irreversible write requires a deterministic authority gate. Inner-model signals can prioritize where to investigate, not authorize commit.</p>\n      <h3>5. Give each uncertainty signal an auditable definition</h3><p>For each feature record its position, raw versus truncated distribution, tokenizer, sample count, semantic clustering rule, versions, task slice, and missing sources. Then test whether it predicts errors or tool need in that slice against independently labeled whole-task outcomes. Without this contract, “entropy=0.2” lacks even a clear unit and scope. The agent may use it as a diagnostic feature; it should not hard-code it as a universal success probability.</p>\n      <pre><code>signal = inspect_logits(model, exact_prefix, decoder_config)\nsamples = sample_answers(model, exact_context, n)\nclasses = cluster_by_task_meaning(samples)\nif authority_or_current_fact_missing: read_authoritative_source()\nif action_is_irreversible: require_independent_commit_guard()</code></pre>"
+      }
+    },
+    {
+      "id": "mathematics",
+      "title": {
+        "zh": "必要数学：熵与成功率不是同一分母",
+        "en": "Essential mathematics: entropy and success use different events"
+      },
+      "html": {
+        "zh": "<p>给定输入 x 与已经生成的前缀 y&lt;t，位置 t 对词表 token v 的概率可写 <code>p_t(v)=softmax(z_t/T)_v</code>。z_t 是该位置各 token 的 logits，T 是采样 temperature；T 改变后读数随之改变，所以工程诊断要注明是原始分布还是采样分布。局部熵 <code>H_t=-Σ_v p_t(v)log p_t(v)</code> 衡量下一 token 选择的分散程度，单位取决于对数底；它没有把命题真假或工具权限放进事件空间。</p>\n      <p>完整字符串 y 的对数似然是 <code>log P(y|x)=Σ_t log p_t(y_t|x,y&lt;t)</code>。y_t 是第 t 个实际 token，求和到结束 token；若用原始 T=1 分布，这是模型似然，用修改过的 T 则是该解码分布下的似然，二者不能混报。它衡量“写出这串字”，即使 P(y|x) 高也可能只是常见措辞。把同义字符串聚成意义类 C，理论上 <code>P(C|x)=Σ_{y∈C}P(y|x)</code>，但实际无限多改写无法穷举，语义等价也由任务定义。语义熵是这些意义类质量的分散度，不是环境正确率。</p>\n      <p>Agent 关心的事件 S 是“在真实环境中目标达成且授权成立”。<code>P(S|x,action,world)</code> 还取决于 world 中模型未观察到的事实、工具行为和政策。若 world 未给定，不能由 token 熵代数推出 S。工程上要用独立任务标签估计信号与 S 的关系，并随模型、任务分布和工具环境变化重新校准。一个“99% 的下一 token”与“99% 可以安全发邮件”分母根本不同。</p>",
+        "en": "<p>Given input x and already generated prefix y&lt;t, the probability for vocabulary token v at position t can be written <code>p_t(v)=softmax(z_t/T)_v</code>. Here z_t is the vector of token logits and T is sampling temperature. Changing T changes the reading, so diagnostics must say whether they use the raw or sampling distribution. Local entropy <code>H_t=-Σ_v p_t(v)log p_t(v)</code> measures dispersion among next-token options; its unit depends on log base. Truth of a proposition and tool authority are not events in that vocabulary distribution.</p>\n      <p>The log likelihood of full string y is <code>log P(y|x)=Σ_t log p_t(y_t|x,y&lt;t)</code>. Here y_t is the actual token at step t and the sum includes the end token. With raw T=1 probabilities this is model likelihood; with adjusted T it is likelihood under that decoding distribution. Do not mix the two. It scores how likely the string is to be written under the prefix. A high P(y|x) may reflect familiar wording. Group equivalent strings into meaning class C and, in theory, <code>P(C|x)=Σ_{y∈C}P(y|x)</code>. Infinitely many paraphrases cannot be enumerated in practice, and the task defines equivalence. Semantic entropy describes dispersion over meaning classes, not environmental correctness.</p>\n      <p>The agent's target event S is that the goal is achieved in the real environment under valid authority. <code>P(S|x,action,world)</code> also depends on facts in world that the model may not have observed, tool behavior, and policy. Without the world, S cannot be algebraically derived from token entropy. Estimate the relationship between a signal and S on independently labeled whole tasks, and recalibrate when model, task mix, or tool environment changes. “99 percent next token” and “99 percent safe to email” have different denominators.</p>"
+      }
+    },
+    {
+      "id": "implications",
+      "title": {
+        "zh": "对 Agent 系统的影响",
+        "en": "Implications for agent systems"
+      },
+      "html": {
+        "zh": "<p><strong>工具调用：</strong>高语义分歧可以提示需要检索或澄清，但低分歧不保证有权或有据。把“外部事实是否已被可靠观察”作为独立特征；缺少当前审批、资源状态或数据水位时优先只读工具，不由模型自信替代。</p>\n      <p><strong>模型路由：</strong>可把 token/语义信号纳入任务级路由器，但要在匹配的模型版本、prompt、tokenizer 与任务切片上验证预测力。9 月与 10 月已讲过路由与成本前沿；此处新增的是信号语义：若模型升级改变 tokenization，原阈值不能直接搬过去。</p>\n      <p><strong>可观测性：</strong>记录 uncertainty feature 的生成条件而非只存数值；区分原始 logits、采样后的分布、语义聚类结果和实际工具观察。这样事后才能分辨“模型对措辞犹豫”与“模型缺少权限事实”，避免把两种问题都归入低 confidence。</p>",
+        "en": "<p><strong>Tool use:</strong> high semantic disagreement may suggest retrieval or clarification, but low disagreement does not establish authority or evidence. Track whether an external fact has been reliably observed as a separate feature. With no current approval, resource state, or data watermark, prefer a read-only tool over model confidence.</p>\n      <p><strong>Model routing:</strong> token and semantic signals can enter a whole-task router, but their predictive value needs validation for matching model versions, prompts, tokenizers, and task slices. Prior issues covered routing and cost frontiers. The new point here is signal semantics: if a model upgrade changes tokenization, an old threshold cannot simply move with it.</p>\n      <p><strong>Observability:</strong> record the generation conditions of an uncertainty feature, not just its number. Separate raw logits, post-sampling distribution, semantic clusters, and actual tool observations. An incident review can then distinguish “the model hesitated over wording” from “the model lacked an authority fact” instead of lumping both under low confidence.</p>"
+      }
+    },
+    {
+      "id": "tradeoffs",
+      "title": {
+        "zh": "取舍与失败模式",
+        "en": "Trade-offs and failure modes"
+      },
+      "html": {
+        "zh": "<p><strong>解码污染：</strong>temperature 和 top-p 可人为让熵变低或变高，并不改变外部事实。比较不同配置的熵前要还原到同一分布定义；服务不提供完整 logits 时只能报告部分信息，不能估“精确熵”。</p>\n      <p><strong>语言与长度：</strong>不同 tokenizer 对中文、代码、数字的切分不同，序列分数受长度影响。用平均 logprob 也不能消除任务类型和事实难度差异。跨模型直接比较要先做独立校准，不能把数值大小当公尺。</p>\n      <p><strong>语义簇误差：</strong>“允许”和“在取得新批准后允许”一旦被错合，低语义熵会掩盖关键条件。NLI 判别器本身是模型，可受同一误导证据影响；对高风险条件句、数字和否定要人工或规则复核。</p>\n      <p><strong>一致地错：</strong>多次采样若共享错误检索摘要，可能全部给出同一错误答案。语义熵适合寻找部分知识型不确定，却不能证明真实性。Nature 的语义熵研究报告特定数据上的幻觉检测表现，应视为作者结果，不是所有 Agent 场景的保证。</p>\n      <p><strong>成本与行动边界：</strong>采样多次、做语义聚类与工具核查有延迟成本。低风险只读任务可把不确定性用于是否追加检索；外发、删除和付款仍以权限和资源侧校验为门禁。最危险的失败是“高确定性地做错”，不能让高分绕开硬约束。</p>",
+        "en": "<p><strong>Decoding contamination:</strong> temperature and top-p can mechanically make entropy higher or lower without changing external facts. Compare entropy across configurations only after restoring a common distribution definition. A service exposing no full logits supports partial information, not an “exact entropy” estimate.</p>\n      <p><strong>Language and length:</strong> tokenizers split Chinese, code, and numbers differently; sequence scores depend on length. Mean log probability does not erase differences in task type or factual difficulty. Direct cross-model comparison needs independent calibration, not a shared-looking number.</p>\n      <p><strong>Meaning-cluster error:</strong> merging “allowed” with “allowed after new approval” produces deceptively low semantic entropy by erasing the decisive condition. An entailment classifier is itself a model and may share misleading evidence. Check high-risk conditions, numbers, and negation with rules or human adjudication.</p>\n      <p><strong>Consistently wrong samples:</strong> repeated generations sharing a defective retrieved summary may all return the same wrong answer. Semantic entropy can reveal some knowledge uncertainty but cannot prove truth. The Nature semantic-entropy study reports hallucination-detection results in particular data; they are author results, not a guarantee across agent workflows.</p>\n      <p><strong>Cost and action boundary:</strong> repeated sampling, meaning clustering, and tool checks consume time. For a low-risk read-only task, uncertainty can prioritize another retrieval. External send, deletion, and payment still require authority and resource-side gates. The most dangerous failure is being confidently wrong; a high score must not bypass hard constraints.</p>"
+      }
+    },
+    {
+      "id": "takeaways",
+      "title": {
+        "zh": "可以带走的判断",
+        "en": "Reusable judgments"
+      },
+      "html": {
+        "zh": "<ol><li>token 熵只描述下一 token 的分散度；分布受前缀、解码和 tokenizer 影响，不是事实正确率。</li><li>整句概率分散在不同长度与措辞上；语义聚类能合并改写，但聚类本身会错，低语义熵仍可一致地错。</li><li>任务成功需要外部事实、权限、工具效果与验收证据，不能从模型内层概率直接推出。</li><li>不确定性信号可提示“再查哪里”，不可替代不可逆动作前的确定性门禁；其预测力要按任务切片实测。</li></ol>",
+        "en": "<ol><li>Token entropy describes dispersion over next-token choices. Prefix, decoding, and tokenizer affect it; it is not factual accuracy.</li><li>Sentence probability is split across lengths and wordings. Semantic clustering merges paraphrases but can erase conditions; low semantic entropy can still be consistently wrong.</li><li>Task success requires external facts, authority, tool effects, and acceptance evidence. It does not follow directly from inner-model probabilities.</li><li>Uncertainty signals can prioritize where to investigate; they cannot replace deterministic gates before irreversible actions, and their predictive value needs task-slice measurement.</li></ol>"
+      }
+    },
+    {
+      "id": "sources",
+      "title": {
+        "zh": "来源与证据边界",
+        "en": "Sources and evidence boundaries"
+      },
+      "html": {
+        "zh": "<ul><li><a href='https://arxiv.org/abs/1904.09751'>Holtzman 等，The Curious Case of Neural Text Degeneration</a> — 作者论文，讨论生成分布与解码选择；本文不重复其具体采样结果。</li><li><a href='https://arxiv.org/abs/2302.09664'>Kuhn 等，Semantic Uncertainty: Linguistic Invariances for Uncertainty Estimation in Natural Language Generation</a> — 作者论文，提出跨措辞的语义不确定性估计。</li><li><a href='https://www.nature.com/articles/s41586-024-07421-0'>Farquhar 等，Detecting hallucinations in large language models using semantic entropy</a> — 同一研究线的同行评审论文；幻觉检测表现是作者报告，不能代替业务真值验证。</li><li><a href='https://arxiv.org/abs/2207.05221'>Kadavath 等，Language Models (Mostly) Know What They Know</a> — 作者报告特定问答设置中的自我正确性预测。</li><li><a href='https://arxiv.org/abs/1706.04599'>Guo 等，On Calibration of Modern Neural Networks</a> — 原始校准研究；支持区别模型分数与经验正确率，不代表某个 LLM token 分数已校准。</li></ul><p>链接和标题于 2026-11-28 核验。四层不确定性图、外部事实边界与 Agent 控制流建议是编辑性工程综合；没有声称任何当前产品提供完整 logits 或具备特定校准性能。</p>",
+        "en": "<ul><li><a href='https://arxiv.org/abs/1904.09751'>Holtzman et al., The Curious Case of Neural Text Degeneration</a> — author paper on generation distributions and decoding, without reusing its benchmark results here.</li><li><a href='https://arxiv.org/abs/2302.09664'>Kuhn et al., Semantic Uncertainty: Linguistic Invariances for Uncertainty Estimation in Natural Language Generation</a> — author paper on estimating uncertainty across paraphrases.</li><li><a href='https://www.nature.com/articles/s41586-024-07421-0'>Farquhar et al., Detecting hallucinations in large language models using semantic entropy</a> — peer-reviewed work in the same research line; detection performance is author-reported and does not replace business ground truth.</li><li><a href='https://arxiv.org/abs/2207.05221'>Kadavath et al., Language Models (Mostly) Know What They Know</a> — author-reported prediction of own correctness in specific question-answering settings.</li><li><a href='https://arxiv.org/abs/1706.04599'>Guo et al., On Calibration of Modern Neural Networks</a> — original calibration work distinguishing scores from empirical correctness, not a claim that any LLM token score is calibrated.</li></ul><p>Links and titles checked on 2026-11-28. The four-layer uncertainty diagram, external-fact boundary, and agent control-flow recommendations are editorial engineering synthesis. No current product is claimed to expose full logits or to have particular calibration performance.</p>"
+      }
+    },
+    {
+      "id": "continuity",
+      "title": {
+        "zh": "已讲完、尚未讲完与下一篇",
+        "en": "Completed, open, and next"
+      },
+      "html": {
+        "zh": "<p><strong>今天已讲完：</strong>从 logits/softmax 看清 token 分布所指事件；整句似然受长度与分词影响；语义簇合并同义改写却引入聚类误差；真实任务成功还要外部事实、权限和工具效果。低熵不等于真值，高语义一致也可能来自共享错误前提。</p><p><strong>尚未讲完：</strong>怎样在真实 Agent 任务上量化 token、语义与自评分数对错误的预测力？何时因模型不确定而检索、澄清或换模型，何时因外部状态未知而必须查工具？如何按损失、成本与分布漂移校准行动门限？</p><p><strong>下一篇起点：</strong>LLM Uncertainty Internals 2/2 从四层对象和独立任务 outcome 出发，设计分层校准、信息价值驱动的工具调用、选择性停止及分布漂移监测；不重讲采样温度或序列概率。</p>",
+        "en": "<p><strong>Completed today:</strong> logits and softmax define a next-token event; sequence likelihood depends on length and tokenization; meaning clusters merge paraphrases while adding clustering error; real task success also requires external facts, authority, and tool effects. Low entropy is not truth, and semantic agreement can reflect a shared false premise.</p><p><strong>Still open:</strong> how predictive are token, semantic, and self-reported uncertainty signals for errors on real agent tasks? When should model uncertainty trigger retrieval, clarification, or model escalation, and when does unknown external state require a tool regardless of model confidence? How should loss, cost, and distribution shift set action thresholds?</p><p><strong>Next starting point:</strong> LLM Uncertainty Internals 2/2 starts from the four objects and independent whole-task outcomes, then develops stratified calibration, value-of-information tool calls, selective stopping, and drift monitoring. It will not repeat temperature controls or sequence likelihood.</p>"
+      }
+    }
+  ],
+  "continuation": {
+    "status": "continues",
+    "established": {
+      "zh": [
+        "原始/解码后的 token 分布与熵只描述给定前缀下的局部续写，不能直接代表事实正确或授权",
+        "序列似然受长度和 tokenizer 影响；同义答案的语义簇质量需近似且受聚类误差影响",
+        "低语义熵仍可能来自共享错误前提，真实任务成功需外部事实、权限、工具与资源效果",
+        "不确定性信号是诊断特征，必须绑定版本和任务切片并以独立 outcome 实测，不可绕过动作门禁"
+      ],
+      "en": [
+        "Raw and decoded token distributions and entropy describe local continuation under a prefix, not factual correctness or authority",
+        "Sequence likelihood depends on length and tokenizer; meaning-class mass is approximated and subject to clustering error",
+        "Low semantic entropy may reflect a shared false premise; real task success needs external facts, authority, tools, and resource effects",
+        "Uncertainty signals are diagnostic features tied to versions and task slices, measured against independent outcomes, never a bypass for commit gates"
+      ]
+    },
+    "next": {
+      "zh": "LLM Uncertainty Internals 2/2：从四层不确定性对象和独立任务 outcome 出发，设计分层校准、信息价值驱动的工具调用、选择性停止及漂移监测。",
+      "en": "LLM Uncertainty Internals 2/2: start from four uncertainty objects and independent whole-task outcomes to design stratified calibration, value-of-information tool use, selective stopping, and drift monitoring."
+    }
+  }
+}

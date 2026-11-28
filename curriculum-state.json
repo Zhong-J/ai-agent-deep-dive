@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-27",
-  "latestIssueDate": "2026-11-27",
+  "generatedAt": "2026-11-28",
+  "latestIssueDate": "2026-11-28",
   "completedTopics": [
     "agent-verifier-calibration-selective-risk-escalation-online-audit",
     "agent-failure-minimal-cuts-intervention-identifiability-release-gates",
@@ -62,6 +62,13 @@
     "llm-foundations"
   ],
   "history": [
+    {
+      "date": "2026-11-28",
+      "topicId": "llm-token-semantic-uncertainty-task-success-boundaries",
+      "seriesId": "llm-uncertainty-internals",
+      "part": 1,
+      "complete": false
+    },
     {
       "date": "2026-11-27",
       "topicId": "agent-verifier-calibration-selective-risk-escalation-online-audit",
@@ -581,5 +588,26 @@
       "complete": false
     }
   ],
-  "pendingSeries": null
+  "pendingSeries": {
+    "id": "llm-uncertainty-internals",
+    "nextPart": 2,
+    "established": {
+      "zh": [
+        "原始/解码后的 token 分布与熵只描述给定前缀下的局部续写，不能直接代表事实正确或授权",
+        "序列似然受长度和 tokenizer 影响；同义答案的语义簇质量需近似且受聚类误差影响",
+        "低语义熵仍可能来自共享错误前提，真实任务成功需外部事实、权限、工具与资源效果",
+        "不确定性信号是诊断特征，必须绑定版本和任务切片并以独立 outcome 实测，不可绕过动作门禁"
+      ],
+      "en": [
+        "Raw and decoded token distributions and entropy describe local continuation under a prefix, not factual correctness or authority",
+        "Sequence likelihood depends on length and tokenizer; meaning-class mass is approximated and subject to clustering error",
+        "Low semantic entropy may reflect a shared false premise; real task success needs external facts, authority, tools, and resource effects",
+        "Uncertainty signals are diagnostic features tied to versions and task slices, measured against independent outcomes, never a bypass for commit gates"
+      ]
+    },
+    "next": {
+      "zh": "LLM Uncertainty Internals 2/2：从四层不确定性对象和独立任务 outcome 出发，设计分层校准、信息价值驱动的工具调用、选择性停止及漂移监测。",
+      "en": "LLM Uncertainty Internals 2/2: start from four uncertainty objects and independent whole-task outcomes to design stratified calibration, value-of-information tool use, selective stopping, and drift monitoring."
+    }
+  }
 }
